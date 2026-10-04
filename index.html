@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RFP Tracker (Prototype)</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--muted:#5d6678;--line:#dfe3ea;--brand:#2459c9;--ok:#1f8a4c;--warn:#b26a00;--bad:#c0392b;--chip:#eef2fb}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#1b2a4a;color:#fff;padding:12px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0 12px 0 0}
+nav button{background:none;border:0;color:#cfd8ee;font:inherit;padding:8px 12px;border-radius:6px;cursor:pointer}
+nav button.on,nav button:hover{background:#2f4372;color:#fff}
+.who{margin-left:auto;font-size:13px;display:flex;gap:6px;align-items:center}
+.who select{font:inherit;padding:3px}
+main{max-width:1150px;margin:0 auto;padding:20px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:20px}h3{margin:0 0 10px;font-size:16px}
+label{display:block;font-weight:600;margin:12px 0 4px}
+.hint{font-weight:400;color:var(--muted);font-size:13px}
+input,select,textarea{width:100%;font:inherit;padding:8px;border:1px solid #c7cdd8;border-radius:6px;background:#fff}
+textarea{min-height:80px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.row{grid-template-columns:1fr}}
+.btn{background:var(--brand);color:#fff;border:0;padding:9px 16px;border-radius:6px;font:inherit;cursor:pointer}
+.btn.sec{background:#e7ebf3;color:var(--ink)}.btn.ok{background:var(--ok)}.btn.bad{background:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
+tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
+.chip{display:inline-block;background:var(--chip);border-radius:20px;padding:2px 9px;font-size:12px;white-space:nowrap}
+.t-Low{background:#e5f5ec;color:var(--ok)}.t-Medium{background:#fff3df;color:var(--warn)}.t-High{background:#fde7e4;color:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.kpi b{display:block;font-size:26px}.kpi span{color:var(--muted);font-size:13px}
+.steps{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0}
+.step{flex:1;min-width:95px;padding:6px;border-radius:6px;background:#eef0f4;font-size:12px;text-align:center}
+.step.done{background:#d9f0e2}.step.now{background:var(--brand);color:#fff;font-weight:600}
+.gate{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:8px;margin:6px 0;flex-wrap:wrap}
+.gate.yes{background:#f1faf4;border-color:#bfe3cc}
+.muted{color:var(--muted)}.small{font-size:13px}
+.suggest{background:#f0f5ff;border:1px solid #c9d8f7;padding:10px 12px;border-radius:8px;margin-top:14px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{width:auto}
+.notice{background:#fffbe6;border:1px solid #f0dc8a;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>RFP Tracker <span style="font-weight:400;opacity:.7">prototype</span></h1>
+  <nav>
+    <button data-v="dash" class="on">Dashboard</button>
+    <button data-v="intake">New request</button>
+    <button data-v="register">RFP register</button>
+    <button data-v="approvals">My approvals</button>
+    <button data-v="data">Data &amp; export</button>
+  </nav>
+  <div class="who">Acting as
+    <select id="who">
+      <option>Process Owner</option><option>Sponsor</option><option>Finance</option>
+      <option>Vendor Risk</option><option>Evaluation Team</option>
+    </select>
+  </div>
+</header>
+<main>
+  <div class="notice">Prototype only. Data is saved in this browser on this computer. Use sample or made-up data, never real company, customer or personal information.</div>
+
+  <!-- DASHBOARD -->
+  <section id="v-dash">
+    <div class="kpis" id="kpis"></div>
+    <div class="row">
+      <div class="card"><h3>Open RFPs by stage</h3><table id="byStage"></table></div>
+      <div class="card"><h3>Waiting on approval</h3><div id="waiting"></div></div>
+    </div>
+    <div class="card"><h3>Recent activity</h3><table id="recent"></table></div>
+  </section>
+
+  <!-- INTAKE -->
+  <section id="v-intake" class="hidden">
+    <div class="card">
+      <h2>New RFP request (Step 1: Intake)</h2>
+      <p class="muted small">The Sponsor fills this in. The app suggests a path and risk tier from the SOP thresholds; the Process Owner confirms them.</p>
+      <form id="intakeForm">
+        <label>Short title <span class="hint">e.g. "Help desk ticketing tool"</span></label>
+        <input name="title" required>
+        <div class="row">
+          <div><label>Sponsor (role or team)</label><input name="sponsor" required placeholder="e.g. Head of Operations"></div>
+          <div><label>Department</label><input name="dept" required></div>
+        </div>
+        <label>Business problem</label>
+        <textarea name="problem" required></textarea>
+        <div class="row">
+          <div><label>Category</label>
+            <select name="category"><option>Software / SaaS</option><option>IT professional or managed services</option><option>Cloud and hosting</option><option>IT hardware or equipment</option></select></div>
+          <div><label>Rough budget, total contract value (CAD)</label><input name="budget" type="number" min="0" step="1000" required></div>
+        </div>
+        <div class="row">
+          <div><label>Needed by</label><input name="neededBy" type="date" required></div>
+          <div><label>Purchase type</label>
+            <select name="purchaseType"><option>Competitive</option><option>Single source (needs justification)</option><option>Emergency (needs justification)</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>Will the vendor touch company or customer data?</label>
+            <select name="data"><option value="none">No data</option><option value="internal">Internal company data</option><option value="customer">Customer or borrower data</option></select></div>
+          <div><label>Critical service? <span class="hint">An outage would stop operations</span></label>
+            <select name="critical"><option value="no">No</option><option value="yes">Yes</option></select></div>
+        </div>
+        <label>Will it support a service delivered to a white-label client or investor?</label>
+        <select name="client"><option value="no">No</option><option value="yes">Yes</option></select>
+        <label id="justLbl" class="hidden">Justification <span class="hint">One page: why only one vendor, or why it is urgent</span></label>
+        <textarea name="justification" id="justTxt" class="hidden"></textarea>
+        <div class="suggest" id="suggest"></div>
+        <p><button class="btn" type="submit">Submit request</button></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- REGISTER -->
+  <section id="v-register" class="hidden">
+    <div class="card">
+      <h2>RFP register</h2>
+      <div class="toolbar">
+        <input id="q" placeholder="Search title or sponsor">
+        <select id="fStatus"><option value="">All statuses</option><option>Open</option><option>Awarded</option><option>Cancelled</option></select>
+        <select id="fPath"><option value="">All paths</option><option>Quick quote</option><option>Light RFP</option><option>Full RFP</option></select>
+      </div>
+      <table id="regTable"></table>
+    </div>
+  </section>
+
+  <!-- DETAIL -->
+  <section id="v-detail" class="hidden"></section>
+
+  <!-- APPROVALS -->
+  <section id="v-approvals" class="hidden">
+    <div class="card"><h2>Approvals waiting on <span id="whoName"></span></h2><div id="myApprovals"></div></div>
+  </section>
+
+  <!-- DATA -->
+  <section id="v-data" class="hidden">
+    <div class="card">
+      <h2>Data and export</h2>
+      <p>These exports use the same column names planned for the SharePoint lists, so the data can be imported there later.</p>
+      <div class="toolbar">
+        <button class="btn" id="expReg">Download register (CSV)</button>
+        <button class="btn" id="expLog">Download approval and audit log (CSV)</button>
+        <button class="btn sec" id="expJson">Full backup (JSON)</button>
+        <label class="btn sec" style="margin:0;font-weight:400">Restore backup<input type="file" id="impJson" accept=".json" class="hidden"></label>
+      </div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+      <div class="toolbar">
+        <button class="btn sec" id="loadSample">Load sample RFPs (made-up)</button>
+        <button class="btn bad" id="wipe">Delete all data in this browser</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+// ---------- Process rules (from the IT Vendor RFP SOP v1) ----------
+const STAGES = {
+  "Quick quote": ["Intake","Collect quotes","Approve and close"],
+  "Light RFP":   ["Intake","Plan and approve","Requirements","Vendor list","Issue and Q&A","Receive proposals","Evaluate","Award"],
+  "Full RFP":    ["Intake","Plan and approve","Requirements","Vendor list","Issue and Q&A","Receive proposals","Evaluate","Award"]
+};
+// Gates that must be signed before leaving a stage. tiers: only applies to these risk tiers.
+const GATES = {
+  "Quick quote": {
+    "Intake": [{id:"path",label:"Path and risk tier confirmed",role:"Process Owner"}],
+    "Collect quotes": [{id:"sec",label:"Security check (vendor touches data)",role:"Vendor Risk",tiers:["Medium","High"]}],
+    "Approve and close": [{id:"award",label:"Purchase approved",role:"Sponsor"}]
+  },
+  "RFP": {
+    "Intake": [{id:"path",label:"Path and risk tier confirmed",role:"Process Owner"}],
+    "Plan and approve": [
+      {id:"budget",label:"Budget confirmed",role:"Finance"},
+      {id:"criticality",label:"Early view on vendor criticality",role:"Vendor Risk"},
+      {id:"plan",label:"Sourcing plan approved",role:"Sponsor"}],
+    "Requirements": [
+      {id:"weights",label:"Requirements and scoring weights locked",role:"Evaluation Team"},
+      {id:"reqs",label:"RFP document approved",role:"Sponsor"}],
+    "Vendor list": [
+      {id:"prescreen",label:"Vendor pre-screen (sanctions, red flags)",role:"Vendor Risk"},
+      {id:"invite",label:"Invited vendor list approved",role:"Process Owner"}],
+    "Issue and Q&A": [{id:"issue",label:"RFP email approved to send to all vendors",role:"Process Owner"}],
+    "Receive proposals": [{id:"complete",label:"Proposals logged and checked for completeness",role:"Process Owner"}],
+    "Evaluate": [
+      {id:"scores",label:"Independent scores agreed, recommendation written",role:"Evaluation Team"},
+      {id:"riskreview",label:"Risk review of leading vendor",role:"Vendor Risk"},
+      {id:"cost",label:"Cost confirmed",role:"Finance"}],
+    "Award": [
+      {id:"award",label:"Award approved",role:"Sponsor"},
+      {id:"risksign",label:"Vendor Risk sign-off",role:"Vendor Risk"},
+      {id:"letters",label:"Award and regret letters approved to send",role:"Process Owner"}]
+  }
+};
+const EXCEPTION_GATES = [
+  {id:"just_s",label:"Exception justification approved",role:"Sponsor"},
+  {id:"just_p",label:"Exception justification approved",role:"Process Owner"}];
+
+function suggest(f){
+  const budget = +f.budget||0;
+  let tier = "Low";
+  if (f.data==="internal") tier = "Medium";
+  if (f.data==="customer" || f.critical==="yes" || f.client==="yes") tier = "High";
+  let path = budget < 25000 ? "Quick quote" : budget <= 250000 ? "Light RFP" : "Full RFP";
+  const reasons = [];
+  if (f.data==="customer" || f.critical==="yes") { if(path!=="Full RFP") reasons.push("Risk overrides money: customer data or a critical service needs the full RFP."); path = "Full RFP"; }
+  else if (tier==="High" && path==="Quick quote") { path="Light RFP"; reasons.push("Client or investor service needs a full Vendor Risk review."); }
+  const target = {"Quick quote":"1 to 2 weeks","Light RFP":"4 to 6 weeks","Full RFP":"8 to 12 weeks"}[path];
+  return {path,tier,target,reasons};
+}
+
+// ---------- Storage ----------
+const KEY="rfpTracker.v1";
+let db = load();
+function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || {rfps:[],log:[],seq:1}; }catch(e){ return {rfps:[],log:[],seq:1}; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ alert("Could not save in this browser."); } }
+const now = () => new Date().toISOString();
+const who = () => document.getElementById("who").value;
+function log(rfp, action, detail){ db.log.push({RFPID:rfp.RFPID, When:now(), Who:who(), Action:action, Detail:detail||""}); }
+
+function gatesFor(r, stage){
+  const set = r.Path==="Quick quote" ? GATES["Quick quote"] : GATES["RFP"];
+  let g = (set[stage]||[]).filter(x=>!x.tiers || x.tiers.includes(r.RiskTier));
+  if (stage==="Intake" && r.PurchaseType!=="Competitive") g = g.concat(EXCEPTION_GATES);
+  return g;
+}
+const stagesOf = r => STAGES[r.Path];
+const pending = r => r.Status!=="Open" ? [] : gatesFor(r, r.Stage).filter(g=>!r.Approvals[r.Stage+"/"+g.id]);
+
+// ---------- Views ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = n => "$"+(+n||0).toLocaleString("en-CA");
+const day = iso => iso ? iso.slice(0,10) : "";
+const daysSince = iso => Math.floor((Date.now()-new Date(iso))/864e5);
+
+function show(v){
+  document.querySelectorAll("main>section").forEach(s=>s.classList.add("hidden"));
+  $("#v-"+v).classList.remove("hidden");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
+  ({dash:renderDash,register:renderReg,approvals:renderApprovals,intake:updateSuggest}[v]||(()=>{}))();
+}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>show(b.dataset.v));
+$("#who").onchange=()=>{ const cur=[...document.querySelectorAll("main>section")].find(s=>!s.classList.contains("hidden")).id.slice(2); cur==="detail"?openRfp(currentId):show(cur); };
+
+function renderDash(){
+  const open = db.rfps.filter(r=>r.Status==="Open");
+  const waiting = open.filter(r=>pending(r).length);
+  const value = open.reduce((a,r)=>a+(+r.Budget||0),0);
+  const awarded = db.rfps.filter(r=>r.Status==="Awarded").length;
+  $("#kpis").innerHTML = [["Open RFPs",open.length],["Pipeline value (CAD)",money(value)],["Waiting on approval",waiting.length],["Awarded",awarded]]
+    .map(([k,v])=>`<div class="kpi"><b>${v}</b><span>${k}</span></div>`).join("");
+  const counts = {};
+  open.forEach(r=>counts[r.Stage]=(counts[r.Stage]||0)+1);
+  const order = STAGES["Full RFP"].concat(["Collect quotes","Approve and close"]);
+  $("#byStage").innerHTML = "<tr><th>Stage</th><th>RFPs</th></tr>" + (order.filter(s=>counts[s]).map(s=>`<tr><td>${esc(s)}</td><td>${counts[s]}</td></tr>`).join("") || `<tr><td colspan=2 class="muted">None yet</td></tr>`);
+  $("#waiting").innerHTML = waiting.length ? waiting.map(r=>`<div class="gate"><span><a href="#" onclick="openRfp('${r.RFPID}');return false">${esc(r.RFPID)} ${esc(r.Title)}</a><br><span class="small muted">${pending(r).map(g=>esc(g.role)+": "+esc(g.label)).join("<br>")}</span></span><span class="chip">${daysSince(r.StageSince)} days in stage</span></div>`).join("") : `<p class="muted">Nothing waiting.</p>`;
+  const rec = db.log.slice(-8).reverse();
+  $("#recent").innerHTML = "<tr><th>When</th><th>RFP</th><th>Who</th><th>What</th></tr>" + (rec.map(l=>`<tr><td>${day(l.When)}</td><td>${esc(l.RFPID)}</td><td>${esc(l.Who)}</td><td>${esc(l.Action)}${l.Detail?" <span class=muted>"+esc(l.Detail)+"</span>":""}</td></tr>`).join("") || `<tr><td colspan=4 class="muted">No activity yet. Submit a request or load sample data.</td></tr>`);
+}
+
+// Intake
+const form = $("#intakeForm");
+function formData(){ return Object.fromEntries(new FormData(form)); }
+function updateSuggest(){
+  const f=formData(), s=suggest(f);
+  const exc = f.purchaseType!=="Competitive";
+  $("#justLbl").classList.toggle("hidden",!exc); $("#justTxt").classList.toggle("hidden",!exc); $("#justTxt").required=exc;
+  $("#suggest").innerHTML = `<b>Suggested path:</b> ${s.path} <span class="muted">(target ${s.target})</span> &nbsp; <b>Risk tier:</b> <span class="chip t-${s.tier}">${s.tier}</span>`
+    + (s.reasons.length?`<br><span class="small">${s.reasons.join(" ")}</span>`:"")
+    + (f.client==="yes"?`<br><span class="small">Client or investor service: client terms flow down, Legal checks notice or consent, SOC 1 Type II may be needed.</span>`:"")
+    + (exc?`<br><span class="small">Exception: needs a written justification approved by the Sponsor and the Process Owner.</span>`:"");
+}
+form.addEventListener("input",updateSuggest);
+form.onsubmit = e => {
+  e.preventDefault();
+  const f=formData(), s=suggest(f);
+  const r = { RFPID:"RFP-"+String(db.seq++).padStart(3,"0"), Title:f.title, Sponsor:f.sponsor, Department:f.dept,
+    Problem:f.problem, Category:f.category, Budget:+f.budget, NeededBy:f.neededBy, PurchaseType:f.purchaseType,
+    Justification:f.justification||"", DataAccess:f.data, CriticalService:f.critical, ClientOrInvestor:f.client,
+    Path:s.path, RiskTier:s.tier, Stage:"Intake", Status:"Open", Created:now(), StageSince:now(), Approvals:{}, Notes:[] };
+  db.rfps.push(r); log(r,"Request submitted",`${s.path}, ${s.tier} risk`); save();
+  form.reset(); openRfp(r.RFPID);
+};
+
+// Register
+["#q","#fStatus","#fPath"].forEach(s=>$(s).addEventListener("input",renderReg));
+function renderReg(){
+  const q=$("#q").value.toLowerCase(), st=$("#fStatus").value, p=$("#fPath").value;
+  const rows = db.rfps.filter(r=>(!q||(r.Title+" "+r.Sponsor).toLowerCase().includes(q))&&(!st||r.Status===st)&&(!p||r.Path===p));
+  $("#regTable").innerHTML = "<tr><th>ID</th><th>Title</th><th>Sponsor</th><th>Path</th><th>Risk</th><th>Value</th><th>Stage</th><th>Status</th><th>Needed by</th></tr>" +
+    (rows.map(r=>`<tr class="click" onclick="openRfp('${r.RFPID}')"><td>${r.RFPID}</td><td>${esc(r.Title)}</td><td>${esc(r.Sponsor)}</td><td>${r.Path}</td><td><span class="chip t-${r.RiskTier}">${r.RiskTier}</span></td><td>${money(r.Budget)}</td><td>${esc(r.Stage)}${pending(r).length?' <span class="chip">needs approval</span>':''}</td><td>${r.Status}</td><td>${r.NeededBy}</td></tr>`).join("") || `<tr><td colspan=9 class="muted">No RFPs match.</td></tr>`);
+}
+
+// Detail
+let currentId=null;
+function openRfp(id){
+  currentId=id; const r=db.rfps.find(x=>x.RFPID===id); if(!r) return show("register");
+  document.querySelectorAll("main>section").forEach(s=>s.classList.add("hidden")); $("#v-detail").classList.remove("hidden");
+  const st=stagesOf(r), idx=st.indexOf(r.Stage), gates=gatesFor(r,r.Stage), pend=pending(r), last=idx===st.length-1;
+  const gateHtml = gates.length ? gates.map(g=>{
+    const a=r.Approvals[r.Stage+"/"+g.id];
+    return `<div class="gate ${a?"yes":""}"><span><b>${esc(g.label)}</b><br><span class="small muted">Signs: ${esc(g.role)}</span></span>`+
+      (a?`<span class="small">Approved by ${esc(a.by)} on ${day(a.when)}</span>`:
+        (r.Status!=="Open"?"":`<span>${g.role===who()?`<button class="btn ok" onclick="approve('${r.RFPID}','${g.id}')">Approve</button>`:`<span class="small muted">Switch "Acting as" to ${esc(g.role)} to approve</span>`}</span>`))+`</div>`;
+  }).join("") : `<p class="muted">No sign-off needed at this stage.</p>`;
+  const myLog = db.log.filter(l=>l.RFPID===id).slice().reverse();
+  $("#v-detail").innerHTML = `
+  <div class="card">
+    <p><a href="#" onclick="show('register');return false">&larr; Back to register</a></p>
+    <h2>${r.RFPID}: ${esc(r.Title)} <span class="chip">${r.Status}</span></h2>
+    <div class="steps">${st.map((s,i)=>`<div class="step ${i<idx||r.Status==="Awarded"?"done":i===idx&&r.Status==="Open"?"now":""}">${i+1}. ${esc(s)}</div>`).join("")}</div>
+    <div class="row small">
+      <div><b>Sponsor:</b> ${esc(r.Sponsor)} (${esc(r.Department)})<br><b>Category:</b> ${esc(r.Category)}<br><b>Value:</b> ${money(r.Budget)}<br><b>Needed by:</b> ${r.NeededBy}<br><b>Purchase type:</b> ${esc(r.PurchaseType)}</div>
+      <div><b>Path:</b> ${r.Path} &nbsp; <b>Risk tier:</b> <span class="chip t-${r.RiskTier}">${r.RiskTier}</span><br><b>Data access:</b> ${{none:"No data",internal:"Internal company data",customer:"Customer or borrower data"}[r.DataAccess]}<br><b>Critical service:</b> ${r.CriticalService}<br><b>Client or investor service:</b> ${r.ClientOrInvestor}<br><b>In current stage:</b> ${daysSince(r.StageSince)} days</div>
+    </div>
+    <p class="small"><b>Business problem:</b> ${esc(r.Problem)}</p>
+    ${r.Justification?`<p class="small"><b>Justification:</b> ${esc(r.Justification)}</p>`:""}
+    ${r.Status==="Open"&&r.Stage==="Intake"&&who()==="Process Owner"?`<p class="small">Change path: <select style="width:auto" onchange="changePath('${r.RFPID}',this.value)">${Object.keys(STAGES).map(p=>`<option ${p===r.Path?"selected":""}>${p}</option>`).join("")}</select> &nbsp; Risk tier: <select style="width:auto" onchange="changeTier('${r.RFPID}',this.value)">${["Low","Medium","High"].map(t=>`<option ${t===r.RiskTier?"selected":""}>${t}</option>`).join("")}</select></p>`:""}
+  </div>
+  <div class="card">
+    <h3>Sign-offs for this stage: ${esc(r.Stage)}</h3>
+    ${r.Status==="Open"?gateHtml:`<p class="muted">This RFP is ${r.Status.toLowerCase()}.</p>`}
+    ${r.Status==="Open"?`<p class="toolbar" style="margin-top:14px">
+      <button class="btn" ${pend.length||who()!=="Process Owner"?"disabled":""} onclick="advance('${r.RFPID}')">${last?"Close as awarded":"Move to next stage"}</button>
+      <button class="btn bad" ${who()!=="Process Owner"?"disabled":""} onclick="cancelRfp('${r.RFPID}')">Cancel RFP</button>
+      <span class="small muted">${who()!=="Process Owner"?"Only the Process Owner moves stages.":pend.length?pend.length+" sign-off(s) still needed.":"All sign-offs done."}</span></p>`:""}
+  </div>
+  <div class="card">
+    <h3>Notes</h3>
+    <div class="toolbar"><input id="note" placeholder="Add a note (no personal information)" style="flex:1"><button class="btn sec" onclick="addNote('${r.RFPID}')">Add</button></div>
+    <h3 style="margin-top:16px">Audit log</h3>
+    <table><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr>${myLog.map(l=>`<tr><td>${l.When.replace("T"," ").slice(0,16)}</td><td>${esc(l.Who)}</td><td>${esc(l.Action)}</td><td>${esc(l.Detail)}</td></tr>`).join("")}</table>
+  </div>`;
+}
+function find(id){ return db.rfps.find(x=>x.RFPID===id); }
+function approve(id,gid){ const r=find(id), g=gatesFor(r,r.Stage).find(x=>x.id===gid);
+  r.Approvals[r.Stage+"/"+gid]={by:who(),when:now()}; log(r,"Approved",`${r.Stage}: ${g.label}`); save(); openRfp(id); }
+function advance(id){ const r=find(id), st=stagesOf(r), i=st.indexOf(r.Stage);
+  if(pending(r).length) return;
+  if(i===st.length-1){ r.Status="Awarded"; log(r,"Closed as awarded"); }
+  else { r.Stage=st[i+1]; r.StageSince=now(); log(r,"Moved to stage",r.Stage); }
+  save(); openRfp(id); }
+function cancelRfp(id){ const why=prompt("Reason for cancelling?"); if(why===null) return; const r=find(id); r.Status="Cancelled"; log(r,"Cancelled",why); save(); openRfp(id); }
+function changePath(id,p){ const r=find(id); r.Path=p; log(r,"Path changed",p); save(); openRfp(id); }
+function changeTier(id,t){ const r=find(id); r.RiskTier=t; log(r,"Risk tier changed",t); save(); openRfp(id); }
+function addNote(id){ const t=$("#note").value.trim(); if(!t) return; log(find(id),"Note",t); save(); openRfp(id); }
+
+// Approvals inbox
+function renderApprovals(){
+  $("#whoName").textContent=who();
+  const items=[]; db.rfps.forEach(r=>pending(r).filter(g=>g.role===who()).forEach(g=>items.push({r,g})));
+  $("#myApprovals").innerHTML = items.length ? items.map(({r,g})=>`<div class="gate"><span><b>${esc(g.label)}</b><br><span class="small muted">${r.RFPID} ${esc(r.Title)} &middot; ${esc(r.Stage)} &middot; ${daysSince(r.StageSince)} days in stage</span></span><span><button class="btn sec" onclick="openRfp('${r.RFPID}')">Open</button> <button class="btn ok" onclick="approve('${r.RFPID}','${g.id}');show('approvals')">Approve</button></span></div>`).join("") : `<p class="muted">Nothing waiting for ${esc(who())}. Try another role in "Acting as".</p>`;
+}
+
+// Export / import
+function csv(rows, cols){ const q=v=>`"${String(v??"").replace(/"/g,'""')}"`; return [cols.join(",")].concat(rows.map(r=>cols.map(c=>q(r[c])).join(","))).join("\r\n"); }
+function download(name, text, type){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); }
+const REG_COLS=["RFPID","Title","Sponsor","Department","Category","Budget","NeededBy","PurchaseType","DataAccess","CriticalService","ClientOrInvestor","Path","RiskTier","Stage","Status","Created","StageSince","Problem","Justification"];
+$("#expReg").onclick=()=>download("rfp-register.csv","﻿"+csv(db.rfps,REG_COLS),"text/csv");
+$("#expLog").onclick=()=>download("rfp-audit-log.csv","﻿"+csv(db.log,["RFPID","When","Who","Action","Detail"]),"text/csv");
+$("#expJson").onclick=()=>download("rfp-backup.json",JSON.stringify(db,null,2),"application/json");
+$("#impJson").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.rfps) throw 0; if(confirm("Replace all data in this browser with this backup?")){ db=d; save(); show("dash"); } }catch(_){ alert("That file is not a valid backup."); } }); };
+$("#wipe").onclick=()=>{ if(confirm("Delete every RFP and log entry in this browser? Download a backup first if you want to keep them.")){ db={rfps:[],log:[],seq:1}; save(); show("dash"); } };
+$("#loadSample").onclick=()=>{
+  const samples=[
+    {title:"Help desk ticketing tool",sponsor:"Head of IT Operations",dept:"IT",problem:"Support requests arrive by email and get lost.",category:"Software / SaaS",budget:60000,neededBy:"2027-01-31",purchaseType:"Competitive",data:"internal",critical:"no",client:"no"},
+    {title:"Laptop refresh, 40 units",sponsor:"Head of IT Operations",dept:"IT",problem:"Laptops are past end of support.",category:"IT hardware or equipment",budget:18000,neededBy:"2026-12-15",purchaseType:"Competitive",data:"none",critical:"no",client:"no"},
+    {title:"Loan servicing data platform",sponsor:"Head of Mortgage Operations",dept:"Operations",problem:"Current platform cannot scale to new client volumes.",category:"Cloud and hosting",budget:900000,neededBy:"2027-06-30",purchaseType:"Competitive",data:"customer",critical:"yes",client:"yes"}];
+  const stageTo=[2,1,0];
+  samples.forEach((f,k)=>{ Object.entries(f).forEach(([n,v])=>{ if(form.elements[n]) form.elements[n].value=v; });
+    const s=suggest(f), r={RFPID:"RFP-"+String(db.seq++).padStart(3,"0"),Title:f.title,Sponsor:f.sponsor,Department:f.dept,Problem:f.problem,Category:f.category,Budget:f.budget,NeededBy:f.neededBy,PurchaseType:f.purchaseType,Justification:"",DataAccess:f.data,CriticalService:f.critical,ClientOrInvestor:f.client,Path:s.path,RiskTier:s.tier,Stage:"Intake",Status:"Open",Created:now(),StageSince:now(),Approvals:{},Notes:[]};
+    db.rfps.push(r); log(r,"Request submitted (sample)",`${s.path}, ${s.tier} risk`);
+    for(let i=0;i<stageTo[k];i++){ gatesFor(r,r.Stage).forEach(g=>r.Approvals[r.Stage+"/"+g.id]={by:g.role,when:now()}); r.Stage=stagesOf(r)[i+1]; log(r,"Moved to stage (sample)",r.Stage); }
+  });
+  form.reset(); save(); show("dash");
+};
+
+show("dash");
+</script>
+</body>
+</html>
