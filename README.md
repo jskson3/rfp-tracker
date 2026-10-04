@@ -10,6 +10,7 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 
 - Uses only made-up sample data, saved in your browser.
 - Single-file web app (HTML, CSS and JavaScript), with no install needed.
+- Generates a draft RFP document and a ready-to-paste AI prompt from each request, tailored by category, data access and risk tier.
 
 ## Roadmap
 

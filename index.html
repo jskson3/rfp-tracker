@@ -46,6 +46,10 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
 .toolbar input,.toolbar select{width:auto}
 .notice{background:#fffbe6;border:1px solid #f0dc8a;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px}
 .hidden{display:none}
+.modal{position:fixed;inset:0;background:rgba(15,22,40,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal .card{width:100%;max-width:860px;max-height:92vh;display:flex;flex-direction:column;margin:0}
+.modal.hidden{display:none}
+.modal textarea{flex:1;min-height:50vh;font:13px/1.5 Consolas,monospace;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -152,12 +156,19 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
       </div>
       <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
       <div class="toolbar">
-        <button class="btn sec" id="loadSample">Load sample RFPs (made-up)</button>
+        <button class="btn sec" id="loadSample">Add sample RFPs (made-up)</button>
+        <button class="btn sec" id="resetDemo">Reset to demo data</button>
         <button class="btn bad" id="wipe">Delete all data in this browser</button>
       </div>
     </div>
   </section>
 </main>
+<div class="modal hidden" id="modal"><div class="card">
+  <div class="toolbar" style="justify-content:space-between"><h3 id="mTitle" style="margin:0"></h3><button class="btn sec" onclick="closeModal()">Close</button></div>
+  <p class="small muted" id="mHint" style="margin:0 0 8px"></p>
+  <textarea id="mText" readonly></textarea>
+  <div class="toolbar" style="margin:12px 0 0"><button class="btn" id="mCopy">Copy to clipboard</button><button class="btn sec" id="mDown">Download (.txt)</button><span class="small muted" id="mMsg"></span></div>
+</div></div>
 
 <script>
 // ---------- Process rules (from the IT Vendor RFP SOP v1) ----------
@@ -238,6 +249,7 @@ const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">"
 const money = n => "$"+(+n||0).toLocaleString("en-CA");
 const day = iso => iso ? iso.slice(0,10) : "";
 const daysSince = iso => Math.floor((Date.now()-new Date(iso))/864e5);
+const daysTxt = iso => { const n=daysSince(iso); return n+(n===1?" day":" days"); };
 
 function show(v){
   document.querySelectorAll("main>section").forEach(s=>s.classList.add("hidden"));
@@ -259,7 +271,7 @@ function renderDash(){
   open.forEach(r=>counts[r.Stage]=(counts[r.Stage]||0)+1);
   const order = STAGES["Full RFP"].concat(["Collect quotes","Approve and close"]);
   $("#byStage").innerHTML = "<tr><th>Stage</th><th>RFPs</th></tr>" + (order.filter(s=>counts[s]).map(s=>`<tr><td>${esc(s)}</td><td>${counts[s]}</td></tr>`).join("") || `<tr><td colspan=2 class="muted">None yet</td></tr>`);
-  $("#waiting").innerHTML = waiting.length ? waiting.map(r=>`<div class="gate"><span><a href="#" onclick="openRfp('${r.RFPID}');return false">${esc(r.RFPID)} ${esc(r.Title)}</a><br><span class="small muted">${pending(r).map(g=>esc(g.role)+": "+esc(g.label)).join("<br>")}</span></span><span class="chip">${daysSince(r.StageSince)} days in stage</span></div>`).join("") : `<p class="muted">Nothing waiting.</p>`;
+  $("#waiting").innerHTML = waiting.length ? waiting.map(r=>`<div class="gate"><span><a href="#" onclick="openRfp('${r.RFPID}');return false">${esc(r.RFPID)} ${esc(r.Title)}</a><br><span class="small muted">${pending(r).map(g=>esc(g.role)+": "+esc(g.label)).join("<br>")}</span></span><span class="chip">${daysTxt(r.StageSince)} in stage</span></div>`).join("") : `<p class="muted">Nothing waiting.</p>`;
   const rec = db.log.slice(-8).reverse();
   $("#recent").innerHTML = "<tr><th>When</th><th>RFP</th><th>Who</th><th>What</th></tr>" + (rec.map(l=>`<tr><td>${day(l.When)}</td><td>${esc(l.RFPID)}</td><td>${esc(l.Who)}</td><td>${esc(l.Action)}${l.Detail?" <span class=muted>"+esc(l.Detail)+"</span>":""}</td></tr>`).join("") || `<tr><td colspan=4 class="muted">No activity yet. Submit a request or load sample data.</td></tr>`);
 }
@@ -317,10 +329,11 @@ function openRfp(id){
     <div class="steps">${st.map((s,i)=>`<div class="step ${i<idx||r.Status==="Awarded"?"done":i===idx&&r.Status==="Open"?"now":""}">${i+1}. ${esc(s)}</div>`).join("")}</div>
     <div class="row small">
       <div><b>Sponsor:</b> ${esc(r.Sponsor)} (${esc(r.Department)})<br><b>Category:</b> ${esc(r.Category)}<br><b>Value:</b> ${money(r.Budget)}<br><b>Needed by:</b> ${r.NeededBy}<br><b>Purchase type:</b> ${esc(r.PurchaseType)}</div>
-      <div><b>Path:</b> ${r.Path} &nbsp; <b>Risk tier:</b> <span class="chip t-${r.RiskTier}">${r.RiskTier}</span><br><b>Data access:</b> ${{none:"No data",internal:"Internal company data",customer:"Customer or borrower data"}[r.DataAccess]}<br><b>Critical service:</b> ${r.CriticalService}<br><b>Client or investor service:</b> ${r.ClientOrInvestor}<br><b>In current stage:</b> ${daysSince(r.StageSince)} days</div>
+      <div><b>Path:</b> ${r.Path} &nbsp; <b>Risk tier:</b> <span class="chip t-${r.RiskTier}">${r.RiskTier}</span><br><b>Data access:</b> ${{none:"No data",internal:"Internal company data",customer:"Customer or borrower data"}[r.DataAccess]}<br><b>Critical service:</b> ${r.CriticalService}<br><b>Client or investor service:</b> ${r.ClientOrInvestor}<br><b>In current stage:</b> ${daysTxt(r.StageSince)}</div>
     </div>
     <p class="small"><b>Business problem:</b> ${esc(r.Problem)}</p>
     ${r.Justification?`<p class="small"><b>Justification:</b> ${esc(r.Justification)}</p>`:""}
+    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button><button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
     ${r.Status==="Open"&&r.Stage==="Intake"&&who()==="Process Owner"?`<p class="small">Change path: <select style="width:auto" onchange="changePath('${r.RFPID}',this.value)">${Object.keys(STAGES).map(p=>`<option ${p===r.Path?"selected":""}>${p}</option>`).join("")}</select> &nbsp; Risk tier: <select style="width:auto" onchange="changeTier('${r.RFPID}',this.value)">${["Low","Medium","High"].map(t=>`<option ${t===r.RiskTier?"selected":""}>${t}</option>`).join("")}</select></p>`:""}
   </div>
   <div class="card">
@@ -355,7 +368,7 @@ function addNote(id){ const t=$("#note").value.trim(); if(!t) return; log(find(i
 function renderApprovals(){
   $("#whoName").textContent=who();
   const items=[]; db.rfps.forEach(r=>pending(r).filter(g=>g.role===who()).forEach(g=>items.push({r,g})));
-  $("#myApprovals").innerHTML = items.length ? items.map(({r,g})=>`<div class="gate"><span><b>${esc(g.label)}</b><br><span class="small muted">${r.RFPID} ${esc(r.Title)} &middot; ${esc(r.Stage)} &middot; ${daysSince(r.StageSince)} days in stage</span></span><span><button class="btn sec" onclick="openRfp('${r.RFPID}')">Open</button> <button class="btn ok" onclick="approve('${r.RFPID}','${g.id}');show('approvals')">Approve</button></span></div>`).join("") : `<p class="muted">Nothing waiting for ${esc(who())}. Try another role in "Acting as".</p>`;
+  $("#myApprovals").innerHTML = items.length ? items.map(({r,g})=>`<div class="gate"><span><b>${esc(g.label)}</b><br><span class="small muted">${r.RFPID} ${esc(r.Title)} &middot; ${esc(r.Stage)} &middot; ${daysTxt(r.StageSince)} in stage</span></span><span><button class="btn sec" onclick="openRfp('${r.RFPID}')">Open</button> <button class="btn ok" onclick="approve('${r.RFPID}','${g.id}');show('approvals')">Approve</button></span></div>`).join("") : `<p class="muted">Nothing waiting for ${esc(who())}. Try another role in "Acting as".</p>`;
 }
 
 // Export / import
@@ -367,19 +380,112 @@ $("#expLog").onclick=()=>download("rfp-audit-log.csv","﻿"+csv(db.log,["RFPID",
 $("#expJson").onclick=()=>download("rfp-backup.json",JSON.stringify(db,null,2),"application/json");
 $("#impJson").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.rfps) throw 0; if(confirm("Replace all data in this browser with this backup?")){ db=d; save(); show("dash"); } }catch(_){ alert("That file is not a valid backup."); } }); };
 $("#wipe").onclick=()=>{ if(confirm("Delete every RFP and log entry in this browser? Download a backup first if you want to keep them.")){ db={rfps:[],log:[],seq:1}; save(); show("dash"); } };
-$("#loadSample").onclick=()=>{
-  const samples=[
-    {title:"Help desk ticketing tool",sponsor:"Head of IT Operations",dept:"IT",problem:"Support requests arrive by email and get lost.",category:"Software / SaaS",budget:60000,neededBy:"2027-01-31",purchaseType:"Competitive",data:"internal",critical:"no",client:"no"},
-    {title:"Laptop refresh, 40 units",sponsor:"Head of IT Operations",dept:"IT",problem:"Laptops are past end of support.",category:"IT hardware or equipment",budget:18000,neededBy:"2026-12-15",purchaseType:"Competitive",data:"none",critical:"no",client:"no"},
-    {title:"Loan servicing data platform",sponsor:"Head of Mortgage Operations",dept:"Operations",problem:"Current platform cannot scale to new client volumes.",category:"Cloud and hosting",budget:900000,neededBy:"2027-06-30",purchaseType:"Competitive",data:"customer",critical:"yes",client:"yes"}];
-  const stageTo=[2,1,0];
-  samples.forEach((f,k)=>{ Object.entries(f).forEach(([n,v])=>{ if(form.elements[n]) form.elements[n].value=v; });
-    const s=suggest(f), r={RFPID:"RFP-"+String(db.seq++).padStart(3,"0"),Title:f.title,Sponsor:f.sponsor,Department:f.dept,Problem:f.problem,Category:f.category,Budget:f.budget,NeededBy:f.neededBy,PurchaseType:f.purchaseType,Justification:"",DataAccess:f.data,CriticalService:f.critical,ClientOrInvestor:f.client,Path:s.path,RiskTier:s.tier,Stage:"Intake",Status:"Open",Created:now(),StageSince:now(),Approvals:{},Notes:[]};
-    db.rfps.push(r); log(r,"Request submitted (sample)",`${s.path}, ${s.tier} risk`);
-    for(let i=0;i<stageTo[k];i++){ gatesFor(r,r.Stage).forEach(g=>r.Approvals[r.Stage+"/"+g.id]={by:g.role,when:now()}); r.Stage=stagesOf(r)[i+1]; log(r,"Moved to stage (sample)",r.Stage); }
+// ---------- Sample data (made-up, back-dated so the demo looks lived-in) ----------
+const SAMPLES=[
+  {f:{title:"Help desk ticketing tool",sponsor:"Head of IT Operations",dept:"IT",problem:"Support requests arrive by email and get lost. No tracking of response times.",category:"Software / SaaS",budget:60000,neededBy:"2027-01-31",purchaseType:"Competitive",data:"internal",critical:"no",client:"no"},moves:3,age:38},
+  {f:{title:"Laptop refresh, 40 units",sponsor:"Head of IT Operations",dept:"IT",problem:"Laptops are past end of vendor support.",category:"IT hardware or equipment",budget:18000,neededBy:"2026-11-15",purchaseType:"Competitive",data:"none",critical:"no",client:"no"},moves:99,age:30},
+  {f:{title:"Loan servicing data platform",sponsor:"Head of Mortgage Operations",dept:"Operations",problem:"Current platform cannot scale to new client volumes and needs manual reconciliations.",category:"Cloud and hosting",budget:900000,neededBy:"2027-06-30",purchaseType:"Competitive",data:"customer",critical:"yes",client:"yes"},moves:1,age:12},
+  {f:{title:"24/7 security monitoring service",sponsor:"Chief Information Security Officer",dept:"Security",problem:"No round-the-clock monitoring of security alerts outside business hours.",category:"IT professional or managed services",budget:180000,neededBy:"2027-02-28",purchaseType:"Competitive",data:"customer",critical:"yes",client:"no"},moves:6,age:64},
+  {f:{title:"Cloud backup storage",sponsor:"Head of Infrastructure",dept:"IT",problem:"Backups are kept on-site only; a site outage would lose them.",category:"Cloud and hosting",budget:45000,neededBy:"2027-01-15",purchaseType:"Competitive",data:"internal",critical:"no",client:"no"},moves:4,age:27},
+  {f:{title:"E-signature tool renewal",sponsor:"Head of Legal Operations",dept:"Legal",problem:"Current e-signature contract ends soon and documents must keep flowing.",category:"Software / SaaS",budget:30000,neededBy:"2026-12-01",purchaseType:"Single source (needs justification)",justification:"Switching vendors would mean re-validating every document template and retraining 200 users before the contract ends.",data:"customer",critical:"no",client:"no"},moves:0,age:3},
+  {f:{title:"Meeting room AV upgrade",sponsor:"Head of Facilities",dept:"Facilities",problem:"Video calls in the boardroom are unreliable.",category:"IT hardware or equipment",budget:22000,neededBy:"2026-12-20",purchaseType:"Competitive",data:"none",critical:"no",client:"no"},moves:0,age:21,cancel:"Budget moved to next fiscal year."}
+];
+function addSamples(){
+  const DAY=864e5, t0=Date.now();
+  SAMPLES.forEach(({f,moves,age,cancel})=>{
+    let t=t0-age*DAY; const at=()=>new Date(t).toISOString();
+    const s=suggest(f), r={RFPID:"RFP-"+String(db.seq++).padStart(3,"0"),Title:f.title,Sponsor:f.sponsor,Department:f.dept,Problem:f.problem,Category:f.category,Budget:f.budget,NeededBy:f.neededBy,PurchaseType:f.purchaseType,Justification:f.justification||"",DataAccess:f.data,CriticalService:f.critical,ClientOrInvestor:f.client,Path:s.path,RiskTier:s.tier,Stage:"Intake",Status:"Open",Created:at(),StageSince:at(),Approvals:{},Notes:[]};
+    const L=(who,a,d)=>db.log.push({RFPID:r.RFPID,When:at(),Who:who,Action:a,Detail:d||""});
+    db.rfps.push(r); L("Sponsor","Request submitted",`${s.path}, ${s.tier} risk`);
+    const st=stagesOf(r), n=Math.min(moves,st.length), step=n?(age*DAY*0.85)/n:0;
+    for(let i=0;i<n;i++){
+      t+=step*0.6; gatesFor(r,r.Stage).forEach(g=>{ r.Approvals[r.Stage+"/"+g.id]={by:g.role,when:at()}; L(g.role,"Approved",`${r.Stage}: ${g.label}`); });
+      t+=step*0.4;
+      if(i===st.length-1){ r.Status="Awarded"; L("Process Owner","Closed as awarded"); }
+      else { r.Stage=st[i+1]; r.StageSince=at(); L("Process Owner","Moved to stage",r.Stage); }
+    }
+    if(cancel){ t+=2*DAY; r.Status="Cancelled"; L("Process Owner","Cancelled",cancel); }
   });
-  form.reset(); save(); show("dash");
-};
+  db.log.sort((a,b)=>a.When<b.When?-1:1);
+}
+$("#loadSample").onclick=()=>{ addSamples(); save(); show("dash"); };
+$("#resetDemo").onclick=()=>{ if(confirm("Replace everything in this browser with the demo data?")){ db={rfps:[],log:[],seq:1}; addSamples(); save(); show("dash"); } };
+// First visit: start with demo data so the dashboard is never empty.
+if(localStorage.getItem(KEY)===null && !db.rfps.length){ addSamples(); save(); }
+
+// ---------- RFP draft and AI prompt ----------
+const DATA_TXT={none:"will not access any company or customer data",internal:"will access internal company data",customer:"will access customer or borrower data"};
+function reqsFor(r){
+  const q=[
+    "Describe how your solution meets the business problem in Section 2.",
+    "Implementation approach, timeline and the team you would assign.",
+    "Support model: hours, response times and escalation path.",
+    "Three references from clients of similar size, preferably in Canadian financial services."];
+  if(r.Category==="IT hardware or equipment") q.push("Warranty terms, delivery lead time and end-of-life disposal (with certificate of data destruction).");
+  if(r.Category==="Software / SaaS"||r.Category==="Cloud and hosting") q.push("Uptime commitment (SLA), service credits, and planned maintenance windows.","Where data is stored and processed. Canadian data residency is strongly preferred.");
+  if(r.Category==="IT professional or managed services") q.push("Named key personnel, their qualifications, and your staff replacement policy.");
+  if(r.DataAccess!=="none") q.push("Information security programme: certifications (SOC 2 Type II or ISO 27001), encryption, access control and incident notification times.","Privacy: how you comply with PIPEDA and Quebec Law 25, and any subcontractors who would access our data.");
+  if(r.CriticalService==="yes") q.push("Business continuity and disaster recovery plans, with recovery time and recovery point objectives.","Exit plan: how our data is returned and the service transitioned if the contract ends.");
+  if(r.ClientOrInvestor==="yes") q.push("Willingness to accept audit and regulatory access rights and flow-down terms required by our regulated clients (OSFI Guideline B-10).","A current SOC 1 Type II report, or a plan to provide one.");
+  return q;
+}
+function weightsFor(r){
+  const w = r.Path==="Quick quote" ? [["Price",50],["Fit to requirements",35],["Delivery and support",15]]
+    : r.RiskTier==="High" ? [["Fit to requirements",30],["Security, privacy and risk",25],["Total cost over the contract",20],["Vendor stability and references",15],["Implementation and support",10]]
+    : [["Fit to requirements",35],["Total cost over the contract",25],["Implementation and support",20],["Security and risk",10],["Vendor stability and references",10]];
+  return w;
+}
+function rfpDraft(r){
+  const s=suggest({budget:r.Budget,data:r.DataAccess,critical:r.CriticalService,client:r.ClientOrInvestor});
+  const issue=new Date(); const due=new Date(issue.getTime()+ (r.Path==="Full RFP"?21:14)*864e5);
+  const L=[];
+  L.push(`REQUEST FOR PROPOSAL: ${r.Title.toUpperCase()}`,`Reference: ${r.RFPID}   |   Issued: ${day(issue.toISOString())}   |   Proposals due: ${day(due.toISOString())}`,"DRAFT for internal review. Not yet approved to send.","");
+  L.push("1. ABOUT THIS REQUEST",`We are a Canadian financial services company seeking proposals for: ${r.Title}. This request is sponsored by our ${r.Department} team. Do not share this document outside your proposal team.`,"");
+  L.push("2. BUSINESS PROBLEM",r.Problem,"");
+  L.push("3. SCOPE",`Category: ${r.Category}.`,`The selected vendor ${DATA_TXT[r.DataAccess]}.`,r.CriticalService==="yes"?"This supports a critical business service: an outage would stop operations.":"This is not classed as a critical business service.",`The solution should be in place by ${r.NeededBy}.`,"");
+  L.push("4. WHAT YOUR PROPOSAL MUST COVER",...reqsFor(r).map((x,i)=>`  4.${i+1}  ${x}`),"");
+  L.push("5. PRICING","Give a full cost breakdown in CAD for the whole contract term: one-time costs, recurring fees, and any optional extras. State all assumptions.","");
+  L.push("6. HOW WE WILL EVALUATE",...weightsFor(r).map(([k,v])=>`  ${k}: ${v}%`),"Each evaluator scores independently before the team meets. The lowest price does not automatically win.","");
+  L.push("7. TIMELINE",`  Questions due: ${day(new Date(issue.getTime()+5*864e5).toISOString())} (answers shared with all vendors)`,`  Proposals due: ${day(due.toISOString())}`,`  Expected decision: within ${s.target} of issue`,"");
+  L.push("8. RULES","  All questions go to the single point of contact named in the cover email. Do not contact other staff.","  Proposals are confidential and used only to evaluate this request.","  Submitting a proposal does not create a contract. We may cancel or change this request at any time.");
+  return L.join("\n");
+}
+function aiPrompt(r){
+  return `ROLE
+You are an experienced IT procurement specialist at a Canadian financial services company.
+
+CONTEXT
+We are preparing a request for proposal (RFP). Details from the intake form:
+- Title: ${r.Title}
+- Business problem: ${r.Problem}
+- Category: ${r.Category}
+- Budget (total contract value, CAD): ${money(r.Budget)}
+- Needed by: ${r.NeededBy}
+- Process path: ${r.Path}; risk tier: ${r.RiskTier}
+- Vendor ${DATA_TXT[r.DataAccess]}; critical service: ${r.CriticalService}; supports a regulated client or investor service: ${r.ClientOrInvestor}
+
+TASK
+1. Write 10 to 15 specific, testable requirements for this RFP, grouped as Functional, Technical, Security and privacy, and Commercial.
+2. List 5 questions vendors are likely to ask, with suggested answers.
+3. Flag any risks or gaps in the intake details above.
+
+RULES
+- Canadian context: PIPEDA, Quebec Law 25, Canadian data residency where data is involved${r.ClientOrInvestor==="yes"?", OSFI Guideline B-10 flow-down terms":""}.
+- Do not invent company names, people or numbers that are not given above.
+- Plain English, short sentences.
+
+OUTPUT
+Markdown with three headings matching the three tasks. Requirements as a numbered list.`;
+}
+let modalName="";
+function openModal(title,hint,text,file){ $("#mTitle").textContent=title; $("#mHint").textContent=hint; $("#mText").value=text; $("#mMsg").textContent=""; modalName=file; $("#modal").classList.remove("hidden"); }
+function closeModal(){ $("#modal").classList.add("hidden"); }
+$("#modal").onclick=e=>{ if(e.target.id==="modal") closeModal(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+$("#mCopy").onclick=()=>{ const t=$("#mText"); (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>$("#mMsg").textContent="Copied.",()=>{ t.select(); document.execCommand("copy"); $("#mMsg").textContent="Copied."; }); };
+$("#mDown").onclick=()=>download(modalName,$("#mText").value,"text/plain");
+function showDraft(id){ const r=find(id); openModal(`Draft RFP: ${r.RFPID}`,"Built from the intake answers and the SOP rules: requirements and scoring weights change with category, data access and risk tier.",rfpDraft(r),`${r.RFPID}-draft.txt`); log(r,"RFP draft generated"); save(); }
+function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,"Paste into Microsoft Copilot, ChatGPT or Claude to expand the requirements. Contains no personal or client information.",aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
 
 show("dash");
 </script>
