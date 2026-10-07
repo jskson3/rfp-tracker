@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Case study: designing an IT vendor RFP process from scratch and building an AI-assisted app that runs it.">
+<title>RFP Tracker Case Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a case study set like an RFP document: reference line, numbered sections, one reading column, wide bands for the pipeline, diagram and screenshots */
+:root{
+  --bg:#f5f6f8; --paper:#ffffff; --ink:#152238; --muted:#566278; --line:#d9dee7;
+  --accent:#0d7a5f; --accent-soft:#e2f2ec; --gate:#b4570f; --gate-soft:#fbeee2;
+  --display:"Archivo", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --body:"Public Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141c; --paper:#161d28; --ink:#e7ebf2; --muted:#9ba6b8; --line:#2a3443;
+  --accent:#5cc9a7; --accent-soft:#16352c; --gate:#f0a35e; --gate-soft:#3a2716; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141c; --paper:#161d28; --ink:#e7ebf2; --muted:#9ba6b8; --line:#2a3443;
+  --accent:#5cc9a7; --accent-soft:#16352c; --gate:#f0a35e; --gate-soft:#3a2716; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;margin:0}
+.wrap{max-width:860px;margin:0 auto;padding-inline:16px;padding-block:48px 72px}
+h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(2rem,5vw,3rem);font-weight:800;letter-spacing:-.01em}
+h2{font-size:1.45rem;font-weight:800;display:flex;gap:12px;align-items:baseline}
+h2 .n{font-family:var(--mono);font-size:.9rem;font-weight:500;color:var(--accent)}
+h3{font-size:1.05rem;font-weight:600}
+p{margin:0;max-width:66ch}
+a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.mono{font-family:var(--mono)}
+
+.ref{font-family:var(--mono);font-size:.8rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 18px;border-block:1px solid var(--line);padding-block:8px;margin-bottom:28px}
+.lede{font-size:1.18rem;color:var(--muted);margin-top:16px;max-width:60ch}
+.byline{margin-top:18px;font-weight:600}
+.byline span{font-weight:400;color:var(--muted)}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.cta a{display:inline-block;padding:9px 16px;border-radius:6px;font-weight:600;text-decoration:none;border:1px solid var(--accent)}
+.cta a.primary{background:var(--accent);color:var(--paper)}
+
+.facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:36px}
+.facts div{background:var(--paper);padding:14px 16px}
+.facts dt{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+@media (max-width:760px){.facts{grid-template-columns:repeat(2,minmax(0,1fr))}.facts div:last-child{grid-column:1/-1}}
+.facts dd{margin:4px 0 0;font-weight:600;font-size:.98rem}
+
+section{margin-top:60px;display:grid;gap:16px}
+section > p{max-width:66ch}
+ul.tight{margin:0;padding-left:1.2em;display:grid;gap:6px;max-width:66ch}
+
+/* the eight stages, with gates */
+.pipe{overflow-x:auto;padding-bottom:4px}
+.pipe ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(8,minmax(92px,1fr));gap:6px;min-width:760px}
+.pipe li{background:var(--paper);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:4px;padding:8px 10px;font-size:.86rem;font-weight:600;line-height:1.3}
+.pipe li small{display:block;font-family:var(--mono);font-weight:400;color:var(--muted);font-size:.72rem;margin-bottom:3px}
+.pipe li em{display:block;font-style:normal;font-weight:400;color:var(--gate);font-size:.74rem;margin-top:6px}
+.caption{font-size:.88rem;color:var(--muted)}
+
+/* decisions */
+.decisions{display:grid;gap:0;border-top:1px solid var(--line)}
+.dec{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px 28px;padding-block:16px;border-bottom:1px solid var(--line)}
+.dec h3{font-size:1rem}
+.dec p{color:var(--muted);font-size:.96rem}
+@media (max-width:640px){.dec{grid-template-columns:1fr}}
+
+/* agents table */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:560px}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+
+.callout{background:var(--gate-soft);border-left:3px solid var(--gate);padding:14px 18px;border-radius:0 6px 6px 0;max-width:72ch}
+.callout p{max-width:none}
+.callout b{color:var(--gate)}
+
+/* diagram */
+.diagram{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:620px;height:auto}
+.diagram text{font-family:var(--body);fill:var(--ink)}
+.diagram .q{fill:var(--muted)}
+.diagram .box{fill:var(--bg);stroke:var(--line);stroke-width:1.25}
+.diagram .hot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.diagram .wire{stroke:var(--muted);stroke-width:1.25;fill:none}
+.diagram .arrow{fill:var(--muted)}
+
+/* screenshots */
+.shots{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1.1fr);gap:16px;align-items:start}
+@media (max-width:640px){.shots{grid-template-columns:1fr}}
+figure{margin:0;display:grid;gap:8px}
+figure img{width:100%;max-width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
+figcaption{font-size:.85rem;color:var(--muted)}
+figure img.phone{aspect-ratio:390/820;object-fit:cover;object-position:top}
+@media (max-width:640px){figure img.phone{max-width:300px}}
+
+.nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px}
+.nums div{border-top:2px solid var(--ink);padding-top:8px}
+.nums b{font-family:var(--display);font-size:2rem;font-weight:800;display:block;line-height:1.1;font-variant-numeric:tabular-nums}
+.nums span{font-size:.9rem;color:var(--muted)}
+
+.lessons{counter-reset:l;list-style:none;padding:0;margin:0;display:grid;gap:14px;max-width:70ch}
+.lessons li{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:4px}
+.lessons li::before{counter-increment:l;content:counter(l,decimal-leading-zero);font-family:var(--mono);color:var(--accent);font-size:.85rem;padding-top:3px}
+
+footer{margin-top:64px;padding-top:16px;border-top:1px solid var(--line);font-size:.88rem;color:var(--muted);display:grid;gap:6px}
+footer p{max-width:none}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <div class="ref"><span>Case study</span><span>Ref: RFP-TRACKER</span><span>Built: 4–7 Oct 2026</span><span>Status: live</span></div>
+
+  <h1>An RFP process from a blank page, and the AI app that runs it</h1>
+  <p class="lede">A mid-sized Canadian financial services firm was buying more IT from vendors but had no RFP process and no procurement team. I designed the process first, then built a working app where AI agents draft each stage and people make every decision.</p>
+  <p class="byline">Navneet Kathuria <span>· AI Product Manager · product, process design and build</span></p>
+  <div class="cta">
+    <a class="primary" href="https://rfp-tracker-swart.vercel.app">Try the live app</a>
+    <a href="https://github.com/jskson3/rfp-tracker">Read the code on GitHub</a>
+  </div>
+
+  <dl class="facts">
+    <div><dt>Problem</dt><dd>No RFP process, no procurement team</dd></div>
+    <div><dt>My role</dt><dd>Process owner, PM and builder</dd></div>
+    <div><dt>Time</dt><dd>4 days on the calendar, about an hour a day</dd></div>
+    <div><dt>Running cost</dt><dd>CAD 0 (free tiers)</dd></div>
+    <div><dt>Stack</dt><dd>Supabase, Vercel, Gemini</dd></div>
+  </dl>
+
+  <section aria-labelledby="h1s">
+    <h2 id="h1s"><span class="n">1.</span>The problem</h2>
+    <p>The firm had shifted toward buying software and services instead of building them. Each purchase was handled differently by whoever needed it. That created three risks:</p>
+    <ul class="tight">
+      <li><b>No audit trail.</b> Nobody could show who approved a vendor, or why.</li>
+      <li><b>Regulated clients.</b> The firm's clients include banks and insurers, whose rules on outsourcing, data residency and confidentiality flow down to every vendor.</li>
+      <li><b>No one to run it.</b> There was no procurement team to hire into, so the process had to run with very little human effort.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="h2s">
+    <h2 id="h2s"><span class="n">2.</span>Process before code</h2>
+    <p>I wrote the procedure before writing any software, so the app would enforce a process people had agreed to rather than invent one. The result was a standard operating procedure with eight stages, three paths sized by value and risk (quick quote, light RFP, full RFP) and a sign-off gate at every stage.</p>
+    <div class="pipe" role="region" aria-label="The eight RFP stages, scrolls sideways on small screens" tabindex="0">
+      <ol>
+        <li><small>01</small>Intake<em>Path and risk tier</em></li>
+        <li><small>02</small>Plan and approve<em>Budget, sourcing plan</em></li>
+        <li><small>03</small>Requirements<em>Scoring weights locked</em></li>
+        <li><small>04</small>Vendor list<em>Sanctions pre-screen</em></li>
+        <li><small>05</small>Issue and Q&amp;A<em>Send approved</em></li>
+        <li><small>06</small>Receive proposals<em>Completeness check</em></li>
+        <li><small>07</small>Evaluate<em>Independent scores</em></li>
+        <li><small>08</small>Award<em>Risk sign-off, letters</em></li>
+      </ol>
+    </div>
+    <p class="caption">Each orange line is a gate: the RFP can't move on until the named role signs it in the app.</p>
+  </section>
+
+  <section aria-labelledby="h3s">
+    <h2 id="h3s"><span class="n">3.</span>Key product decisions</h2>
+    <div class="decisions">
+      <div class="dec"><h3>AI drafts, people decide</h3><p>With no procurement team, a team of AI agents does the paperwork and one named human stays accountable. Auditors always get a person's name against each decision.</p></div>
+      <div class="dec"><h3>One agent per stage, with a real job title</h3><p>An early prompt cast the AI as a "procurement specialist", a role the firm doesn't have. Each agent now has the role of whoever really does that work, such as a business analyst at intake or a proposal analyst at evaluation.</p></div>
+      <div class="dec"><h3>Guests can try everything, but can't break it</h3><p>Recruiters click freely; their changes stay in their own browser. Only editors can save, and the database itself enforces that with row-level security. The audit log can only be added to.</p></div>
+      <div class="dec"><h3>Keep the AI key and the prompt on the server</h3><p>The page sends only the intake answers. A small server function builds the prompt and calls Gemini, so the key stays hidden and nobody can use it as a free chatbot.</p></div>
+      <div class="dec"><h3>Free tools, one per session</h3><p>Each session added one tool: database, then logins, then hosting, then AI. With no billing set up anywhere, the worst case is a used-up daily quota, never a bill.</p></div>
+      <div class="dec"><h3>Placeholders over waiting</h3><p>Spend limits and volumes weren't known yet, so they went in as clearly marked placeholders and the work kept moving.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h4s">
+    <h2 id="h4s"><span class="n">4.</span>The AI agents</h2>
+    <p>Seven agents are designed in the procedure. Five draft inside the app today, each picked automatically from the RFP's current stage. They share one prompt pattern (role, context, task, rules, output), so the copyable prompt and the live AI draft always match.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Agent</th><th>Works as</th><th>Drafts</th></tr></thead>
+        <tbody>
+          <tr><td>Intake</td><td>Business analyst</td><td>Missing-information questions and a one-page sourcing plan</td></tr>
+          <tr><td>Requirements</td><td>Business analyst and RFP writer</td><td>10 to 15 testable requirements, likely vendor questions, gaps</td></tr>
+          <tr><td>Vendor research</td><td>Market researcher</td><td>Kinds of vendor to invite and a screening checklist</td></tr>
+          <tr><td>Vendor liaison</td><td>Communications coordinator</td><td>Invitation email, Q&amp;A replies, award and regret letters</td></tr>
+          <tr><td>Evaluation assistant</td><td>Proposal analyst</td><td>Evidence guide and red flags for evaluators. It never scores.</td></tr>
+          <tr><td>Coordinator</td><td>Project coordinator</td><td>Planned: reminders and stage hand-offs</td></tr>
+          <tr><td>Reporting</td><td>Data analyst</td><td>Planned: weekly, monthly and quarterly reports</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><p><b>Guardrails built in.</b> Every output is a draft for a person to approve. Prompts forbid personal information, client names and invented numbers, and apply Canadian privacy law. Intake text is cleaned and length-capped on the server so a form field can't smuggle in new instructions. The app holds made-up sample data only.</p></div>
+  </section>
+
+  <section aria-labelledby="h5s">
+    <h2 id="h5s"><span class="n">5.</span>How it's built</h2>
+    <p>A single-page web app with no install. It reads and writes a hosted Postgres database, and calls the AI through one server function.</p>
+    <div class="diagram" role="img" aria-label="Architecture: the browser app talks to Supabase for data and logins, and to a Vercel server function, which calls Google Gemini.">
+      <svg viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-size="13">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+        <rect class="hot" x="10" y="80" width="170" height="74" rx="8"/>
+        <text x="95" y="110" text-anchor="middle" font-weight="600">Browser app</text>
+        <text class="q" x="95" y="130" text-anchor="middle" font-size="11.5">one HTML file</text>
+        <text class="q" x="95" y="145" text-anchor="middle" font-size="11.5">Vercel + GitHub Pages</text>
+
+        <rect class="box" x="290" y="18" width="190" height="74" rx="8"/>
+        <text x="385" y="47" text-anchor="middle" font-weight="600">Supabase</text>
+        <text class="q" x="385" y="67" text-anchor="middle" font-size="11.5">Postgres + logins</text>
+        <text class="q" x="385" y="82" text-anchor="middle" font-size="11.5">row-level security</text>
+
+        <rect class="box" x="290" y="140" width="190" height="74" rx="8"/>
+        <text x="385" y="169" text-anchor="middle" font-weight="600">Vercel function</text>
+        <text class="q" x="385" y="189" text-anchor="middle" font-size="11.5">builds the agent prompt</text>
+        <text class="q" x="385" y="204" text-anchor="middle" font-size="11.5">holds the secret key</text>
+
+        <rect class="box" x="560" y="140" width="150" height="74" rx="8"/>
+        <text x="635" y="173" text-anchor="middle" font-weight="600">Google Gemini</text>
+        <text class="q" x="635" y="193" text-anchor="middle" font-size="11.5">free tier</text>
+
+        <path class="wire" d="M180 104 C230 104 240 55 288 55" marker-end="url(#ar)"/>
+        <text class="q" x="234" y="66" text-anchor="middle" font-size="11">RFPs, log</text>
+        <path class="wire" d="M180 130 C230 130 240 177 288 177" marker-end="url(#ar)"/>
+        <text class="q" x="234" y="178" text-anchor="middle" font-size="11">intake answers</text>
+        <path class="wire" d="M480 177 L558 177" marker-end="url(#ar)"/>
+        <text class="q" x="519" y="168" text-anchor="middle" font-size="11">prompt</text>
+      </svg>
+    </div>
+    <p class="caption">If the database is unreachable, the app keeps working from the browser's own copy.</p>
+    <div class="shots">
+      <figure>
+        <img src="dash.png" alt="RFP Tracker dashboard: open RFPs by stage, pipeline value, items waiting on approval and recent activity." width="1280" height="1384">
+        <figcaption>Dashboard: what's open, what's waiting on whom, and the audit log.</figcaption>
+      </figure>
+      <figure>
+        <img class="phone" src="mobile.png" alt="The top of the RFP Tracker dashboard on a phone screen." width="390" height="2466">
+        <figcaption>Works on a phone.</figcaption>
+      </figure>
+    </div>
+    <figure>
+      <img src="draft.png" alt="A draft RFP document generated from the intake answers for a loan servicing data platform." width="1280" height="900">
+      <figcaption>A draft RFP built from the intake answers. Requirements and scoring weights change with category, data access and risk tier.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="h6s">
+    <h2 id="h6s"><span class="n">6.</span>Outcome</h2>
+    <div class="nums">
+      <div><b>8</b><span>stages, each with sign-off gates</span></div>
+      <div><b>7</b><span>AI agents designed, 5 live in the app</span></div>
+      <div><b>6</b><span>pull requests from prototype to AI</span></div>
+      <div><b>0</b><span>dollars a month to run</span></div>
+    </div>
+    <p>Alongside the app, I produced the procedure, a process roadmap, a costed architecture for running it on the firm's existing Microsoft tools, a leadership pitch and a prompt library that rebuilds every piece in any AI tool. The portfolio app here is a public, unbranded version with made-up data.</p>
+  </section>
+
+  <section aria-labelledby="h7s">
+    <h2 id="h7s"><span class="n">7.</span>What I learned</h2>
+    <ol class="lessons">
+      <li><p><b>Ask the context questions before the first draft.</b> The procedure was revised five times after v1, and every change came from facts that could have been gathered at the start: who the clients and regulators are, who owns the process, and the rules for AI and data. I now open every project with a one-page brief.</p></li>
+      <li><p><b>An AI's role line is a product decision.</b> The job title in a prompt shapes its tone and assumptions. It should match who really does the work in that organisation.</p></li>
+      <li><p><b>Put the rules where they can't be skipped.</b> Access rules live in the database and the AI prompt lives on the server, not in the page, so nothing depends on the browser behaving.</p></li>
+      <li><p><b>Ship one small step at a time.</b> Each tool went in as its own small change that worked on its own. The first prototype worked on day one, and the database, logins, hosting and AI drafting all went live in one evening of about two hours.</p></li>
+      <li><p><b>Keep a storyboard from day one.</b> Recording each decision and its reason as I went is what made this write-up possible.</p></li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="h8s">
+    <h2 id="h8s"><span class="n">8.</span>What's next</h2>
+    <ul class="tight">
+      <li>Roles linked to accounts, so each person sees only their own approvals.</li>
+      <li>AI summaries of vendor proposals against the locked requirements.</li>
+      <li>A reporting dashboard for cycle time, spend and bottlenecks.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Built with Claude Code as my AI coding partner. I set the direction, made the product calls and reviewed every change.</p>
+    <p>Sample data only. No real company, client or personal information appears in the app or on this page.</p>
+    <p><a href="https://rfp-tracker-swart.vercel.app">Live app</a> · <a href="https://github.com/jskson3/rfp-tracker">GitHub repository</a></p>
+  </footer>
+</div>
+</body>
+</html>

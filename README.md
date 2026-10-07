@@ -4,6 +4,8 @@ A lightweight tool for running IT vendor RFPs (requests for proposal), from inta
 
 **Live demo:** https://rfp-tracker-swart.vercel.app (also on GitHub Pages: https://jskson3.github.io/rfp-tracker)
 
+**Case study:** [how the process and the app were designed and built](https://rfp-tracker-swart.vercel.app/case-study.html) (source: [case-study.html](case-study.html))
+
 ## About
 
 This is a personal portfolio project. I'm designing an RFP process framework from scratch and building the app with AI coding tools.
@@ -25,3 +27,4 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 - [x] AI drafting by a different agent at each stage (Google Gemini, called from a Vercel serverless function so the key stays secret)
 - [ ] AI summaries of vendor responses
 - [ ] Reporting dashboard
+- [x] Case study write-up
