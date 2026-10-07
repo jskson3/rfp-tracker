@@ -2,7 +2,7 @@
 
 A lightweight tool for running IT vendor RFPs (requests for proposal), from intake through vendor evaluation and approval.
 
-**Live demo:** https://jskson3.github.io/rfp-tracker
+**Live demo:** https://rfp-tracker-swart.vercel.app (also on GitHub Pages: https://jskson3.github.io/rfp-tracker)
 
 ## About
 
@@ -19,6 +19,7 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 - [x] Clickable prototype with sample data
 - [x] Shared database (Supabase)
 - [x] Logins: visitors try it as guests, signed-in editors save (Supabase Auth and row level security)
+- [x] Hosting on Vercel (ready for server code that keeps API keys out of the browser)
 - [ ] Roles linked to accounts
 - [ ] AI assistants for drafting RFPs and summarizing vendor responses
 - [ ] Reporting dashboard
