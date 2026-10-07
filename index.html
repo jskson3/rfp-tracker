@@ -188,6 +188,7 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
   </form>
 </div></div>
 
+<script src="agents.js"></script>
 <script>
 // ---------- Process rules (from the IT Vendor RFP SOP v1) ----------
 const STAGES = {
@@ -458,7 +459,8 @@ function openRfp(id){
     </div>
     <p class="small"><b>Business problem:</b> ${esc(r.Problem)}</p>
     ${r.Justification?`<p class="small"><b>Justification:</b> ${esc(r.Justification)}</p>`:""}
-    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button><button class="btn" onclick="showAI('${r.RFPID}')">Draft requirements with AI (Gemini)</button><button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
+    <p class="small muted"><b>AI agent for this stage:</b> ${esc(RFP_AGENTS.agentFor(r.Stage).name)}, ${esc(RFP_AGENTS.agentFor(r.Stage).does)}. People approve everything it drafts.</p>
+    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button><button class="btn" onclick="showAI('${r.RFPID}')">Ask the ${esc(RFP_AGENTS.agentFor(r.Stage).name)} (Gemini)</button><button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
     ${r.Status==="Open"&&r.Stage==="Intake"&&who()==="Process Owner"?`<p class="small">Change path: <select style="width:auto" onchange="changePath('${r.RFPID}',this.value)">${Object.keys(STAGES).map(p=>`<option ${p===r.Path?"selected":""}>${p}</option>`).join("")}</select> &nbsp; Risk tier: <select style="width:auto" onchange="changeTier('${r.RFPID}',this.value)">${["Low","Medium","High"].map(t=>`<option ${t===r.RiskTier?"selected":""}>${t}</option>`).join("")}</select></p>`:""}
   </div>
   <div class="card">
@@ -576,33 +578,7 @@ function rfpDraft(r){
   L.push("8. RULES","  All questions go to the single point of contact named in the cover email. Do not contact other staff.","  Proposals are confidential and used only to evaluate this request.","  Submitting a proposal does not create a contract. We may cancel or change this request at any time.");
   return L.join("\n");
 }
-function aiPrompt(r){
-  return `ROLE
-You are the Requirements agent, a business analyst who writes RFP requirements for a Canadian financial services company. The company has no procurement team: business leaders and the vendor risk team (legal, risk, compliance, security) make every decision. You only draft; you never score, choose or contact vendors.
-
-CONTEXT
-We are preparing a request for proposal (RFP). Details from the intake form:
-- Title: ${r.Title}
-- Business problem: ${r.Problem}
-- Category: ${r.Category}
-- Budget (total contract value, CAD): ${money(r.Budget)}
-- Needed by: ${r.NeededBy}
-- Process path: ${r.Path}; risk tier: ${r.RiskTier}
-- Vendor ${DATA_TXT[r.DataAccess]}; critical service: ${r.CriticalService}; supports a regulated client or investor service: ${r.ClientOrInvestor}
-
-TASK
-1. Write 10 to 15 specific, testable requirements for this RFP, grouped as Functional, Technical, Security and privacy, and Commercial.
-2. List 5 questions vendors are likely to ask, with suggested answers.
-3. Flag any risks or gaps in the intake details above.
-
-RULES
-- Canadian context: PIPEDA, Quebec Law 25, Canadian data residency where data is involved${r.ClientOrInvestor==="yes"?", OSFI Guideline B-10 flow-down terms":""}.
-- Do not invent company names, people or numbers that are not given above.
-- Plain English, short sentences.
-
-OUTPUT
-Markdown with three headings matching the three tasks. Requirements as a numbered list.`;
-}
+const aiPrompt = r => RFP_AGENTS.buildPrompt(r, money(r.Budget), false);
 let modalName="";
 function openModal(title,hint,text,file){ $("#mTitle").textContent=title; $("#mHint").textContent=hint; $("#mText").value=text; $("#mMsg").textContent=""; modalName=file; $("#modal").classList.remove("hidden"); }
 function closeModal(){ $("#modal").classList.add("hidden"); }
@@ -612,11 +588,11 @@ $("#mCopy").onclick=()=>{ const t=$("#mText"); (navigator.clipboard?navigator.cl
 $("#mDown").onclick=()=>download(modalName,$("#mText").value,"text/plain");
 function showDraft(id){ const r=find(id); openModal(`Draft RFP: ${r.RFPID}`,"Built from the intake answers and the SOP rules: requirements and scoring weights change with category, data access and risk tier.",rfpDraft(r),`${r.RFPID}-draft.txt`); log(r,"RFP draft generated"); save(); }
 // Sends only the intake answers; the server builds the prompt and calls Gemini.
-const AI_FIELDS=["Title","Problem","Category","Budget","NeededBy","Path","RiskTier","DataAccess","CriticalService","ClientOrInvestor"];
+const AI_FIELDS=["Title","Problem","Category","Budget","NeededBy","Path","RiskTier","Stage","DataAccess","CriticalService","ClientOrInvestor"];
 let aiTurn=0;
 async function showAI(id){
   const r=find(id), turn=++aiTurn;
-  openModal(`AI draft: ${r.RFPID}`,"Written by Google Gemini from the intake answers. Check it before using it: AI can be wrong. Sample data only, because Google may use free-tier inputs to improve its products.","Asking Gemini... this takes a few seconds.",`${r.RFPID}-ai-draft.txt`);
+  openModal(`${RFP_AGENTS.agentFor(r.Stage).name}: ${r.RFPID}`,`Written by Google Gemini as the ${RFP_AGENTS.agentFor(r.Stage).name}, for the ${r.Stage} stage. Check it before using it: AI can be wrong. Sample data only, because Google may use free-tier inputs to improve its products.`,"Asking Gemini... this takes a few seconds.",`${r.RFPID}-ai-draft.txt`);
   let text;
   try{
     const res=await fetch(AI_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(AI_FIELDS.map(c=>[c,r[c]])))});
@@ -628,7 +604,7 @@ async function showAI(id){
   }
   if(turn===aiTurn && !$("#modal").classList.contains("hidden")) $("#mText").value=text;
 }
-function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,"Paste into Microsoft Copilot, ChatGPT or Claude to expand the requirements. Contains no personal or client information.",aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
+function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,`The ${RFP_AGENTS.agentFor(r.Stage).name}'s prompt for the ${r.Stage} stage. Paste into Microsoft Copilot, ChatGPT or Claude. Contains no personal or client information.`,aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
 
 // Sign in and out
 $("#signBtn").onclick=async()=>{

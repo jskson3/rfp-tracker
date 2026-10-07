@@ -2,7 +2,7 @@
 
 About 10 minutes. Free. You need your Google account and your Vercel login.
 
-**How it works:** on any RFP, **Draft requirements with AI (Gemini)** sends only that RFP's intake answers to a small piece of server code on Vercel ([`draft.js`](draft.js)). The server builds the prompt, calls Google Gemini with a secret key, and sends back the draft. The key never appears in the page, so visitors can't see or copy it.
+**How it works:** on any RFP, the **Ask the ... agent (Gemini)** button sends only that RFP's intake answers and current stage to a small piece of server code on Vercel ([`draft.js`](draft.js)). The server builds the prompt for that stage's AI agent ([`agents.js`](../agents.js)), calls Google Gemini with a secret key, and sends back the draft. The key never appears in the page, so visitors can't see or copy it.
 
 ## 1. Get a free Gemini key
 
@@ -21,7 +21,7 @@ About 10 minutes. Free. You need your Google account and your Vercel login.
 ## 3. Check it works
 
 1. Open https://rfp-tracker-swart.vercel.app, then go to **RFP register** and open any RFP.
-2. Click **Draft requirements with AI (Gemini)**. After a few seconds, a draft appears with requirements, likely vendor questions and risks.
+2. Click the **Ask the ... agent (Gemini)** button. After a few seconds, a draft appears. What it drafts depends on the stage: the Intake agent checks the request, the Requirements agent drafts requirements, and so on.
 3. The same button works on the GitHub Pages copy, because it calls the Vercel server too.
 
 ## Good to know
