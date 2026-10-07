@@ -248,6 +248,8 @@ function suggest(f){
 // The publishable (anon) key is meant to be public; the tables' row level security decides what it can do.
 const SUPABASE_URL = "https://yjgzrnlknsdctunjmqed.supabase.co";
 const SUPABASE_KEY = "sb_publishable_fP2jNcSH3rIBFUkOKiFVGQ_AeoMrT1e";
+// AI drafting runs on Vercel (api/draft.js holds the Gemini key). Copies hosted elsewhere call the Vercel one.
+const AI_URL = location.hostname.endsWith(".vercel.app") ? "/api/draft" : "https://rfp-tracker-swart.vercel.app/api/draft";
 const KEY="rfpTracker.v1", DIRTY=KEY+".unsynced";
 const firstVisit = localStorage.getItem(KEY)===null;
 let db = load();
@@ -456,7 +458,7 @@ function openRfp(id){
     </div>
     <p class="small"><b>Business problem:</b> ${esc(r.Problem)}</p>
     ${r.Justification?`<p class="small"><b>Justification:</b> ${esc(r.Justification)}</p>`:""}
-    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button><button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
+    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button><button class="btn" onclick="showAI('${r.RFPID}')">Draft requirements with AI (Gemini)</button><button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
     ${r.Status==="Open"&&r.Stage==="Intake"&&who()==="Process Owner"?`<p class="small">Change path: <select style="width:auto" onchange="changePath('${r.RFPID}',this.value)">${Object.keys(STAGES).map(p=>`<option ${p===r.Path?"selected":""}>${p}</option>`).join("")}</select> &nbsp; Risk tier: <select style="width:auto" onchange="changeTier('${r.RFPID}',this.value)">${["Low","Medium","High"].map(t=>`<option ${t===r.RiskTier?"selected":""}>${t}</option>`).join("")}</select></p>`:""}
   </div>
   <div class="card">
@@ -609,6 +611,23 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
 $("#mCopy").onclick=()=>{ const t=$("#mText"); (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>$("#mMsg").textContent="Copied.",()=>{ t.select(); document.execCommand("copy"); $("#mMsg").textContent="Copied."; }); };
 $("#mDown").onclick=()=>download(modalName,$("#mText").value,"text/plain");
 function showDraft(id){ const r=find(id); openModal(`Draft RFP: ${r.RFPID}`,"Built from the intake answers and the SOP rules: requirements and scoring weights change with category, data access and risk tier.",rfpDraft(r),`${r.RFPID}-draft.txt`); log(r,"RFP draft generated"); save(); }
+// Sends only the intake answers; the server builds the prompt and calls Gemini.
+const AI_FIELDS=["Title","Problem","Category","Budget","NeededBy","Path","RiskTier","DataAccess","CriticalService","ClientOrInvestor"];
+let aiTurn=0;
+async function showAI(id){
+  const r=find(id), turn=++aiTurn;
+  openModal(`AI draft: ${r.RFPID}`,"Written by Google Gemini from the intake answers. Check it before using it: AI can be wrong. Sample data only, because Google may use free-tier inputs to improve its products.","Asking Gemini... this takes a few seconds.",`${r.RFPID}-ai-draft.txt`);
+  let text;
+  try{
+    const res=await fetch(AI_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(AI_FIELDS.map(c=>[c,r[c]])))});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok || !d.text) throw new Error(d.error||"The AI service is not available right now.");
+    text=d.text; log(r,"AI draft generated","Gemini"); save();
+  }catch(e){
+    text=(e instanceof TypeError ? "Could not reach the AI service. Check your connection." : e.message)+"\n\nYou can still click \"Copy AI prompt\" and paste it into any AI tool.";
+  }
+  if(turn===aiTurn && !$("#modal").classList.contains("hidden")) $("#mText").value=text;
+}
 function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,"Paste into Microsoft Copilot, ChatGPT or Claude to expand the requirements. Contains no personal or client information.",aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
 
 // Sign in and out
