@@ -16,6 +16,9 @@ nav button.on,nav button:hover{background:#2f4372;color:#fff}
 .sync::before{content:"\25CF  ";color:#9aa6bf}.sync.ok::before{color:#4cd38a}.sync.busy::before{color:#ffd166}.sync.fail::before{color:#ff8a7a}
 .who{font-size:13px;white-space:nowrap;display:flex;gap:6px;align-items:center}
 .who select{font:inherit;padding:3px}
+.signin{background:none;border:1px solid #4a5d8a;color:#fff;font:inherit;font-size:13px;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.signin:hover{background:#2f4372}
+.err{color:var(--bad);font-size:13px;min-height:1.2em;margin:8px 0 0}
 main{max-width:1150px;margin:0 auto;padding:20px 16px 60px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
 h2{margin:0 0 12px;font-size:20px}h3{margin:0 0 10px;font-size:16px}
@@ -71,6 +74,7 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
       <option>Vendor Risk</option><option>Evaluation Team</option>
     </select>
   </div>
+  <button id="signBtn" class="signin hidden"></button>
 </header>
 <main>
   <div class="notice">Prototype only. <span id="noticeWhere">Data is saved in this browser on this computer.</span> Use sample or made-up data, never real company, customer or personal information.</div>
@@ -173,6 +177,16 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
   <textarea id="mText" readonly></textarea>
   <div class="toolbar" style="margin:12px 0 0"><button class="btn" id="mCopy">Copy to clipboard</button><button class="btn sec" id="mDown">Download (.txt)</button><span class="small muted" id="mMsg"></span></div>
 </div></div>
+<div class="modal hidden" id="signModal"><div class="card" style="max-width:420px">
+  <h3>Sign in to edit</h3>
+  <p class="small muted" style="margin:0">Editors save to the shared database. Guests can try everything, but their changes stay in their own browser and reset when the page reloads. Signing in reloads the shared data.</p>
+  <form id="signForm">
+    <label for="signEmail">Email</label><input id="signEmail" type="email" autocomplete="username" required>
+    <label for="signPass">Password</label><input id="signPass" type="password" autocomplete="current-password" required>
+    <p class="err" id="signErr"></p>
+    <div class="toolbar" style="margin:4px 0 0"><button class="btn" type="submit" id="signGo">Sign in</button><button class="btn sec" type="button" onclick="$('#signModal').classList.add('hidden')">Cancel</button></div>
+  </form>
+</div></div>
 
 <script>
 // ---------- Process rules (from the IT Vendor RFP SOP v1) ----------
@@ -244,6 +258,35 @@ const who = () => document.getElementById("who").value;
 function uuid(){ return crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16)); }
 function log(rfp, action, detail){ db.log.push({LogID:uuid(), RFPID:rfp.RFPID, When:now(), Who:who(), Action:action, Detail:detail||""}); }
 
+// ---------- Logins (Supabase Auth) ----------
+// Visitors are guests: they see the shared data and can try everything, but changes stay in their browser.
+// Editors sign in with an account made in the Supabase dashboard (sign-ups are switched off), and their saves go to the database.
+// The database's row level security enforces this, so the app can't be talked into letting a guest write.
+const AUTH_KEY=KEY+".session";
+const auth = {
+  s: (()=>{ try{ return JSON.parse(localStorage.getItem(AUTH_KEY)); }catch(e){ return null; } })(),
+  async call(path, body, token){
+    const h={apikey:SUPABASE_KEY, "Content-Type":"application/json"}; if(token) h.Authorization="Bearer "+token;
+    const res=await fetch(SUPABASE_URL.replace(/\/+$/,"")+"/auth/v1/"+path, {method:"POST", headers:h, body:JSON.stringify(body||{})});
+    const d=await res.json().catch(()=>({}));
+    if(!res.ok){ const e=new Error(d.msg||d.error_description||d.message||("Error "+res.status)); e.status=res.status; throw e; }
+    return d;
+  },
+  keep(d){ this.s = d && {access_token:d.access_token, refresh_token:d.refresh_token,
+      expires_at:d.expires_at||Math.floor(Date.now()/1000)+(d.expires_in||3600), email:(d.user&&d.user.email)||(this.s&&this.s.email)};
+    if(this.s) localStorage.setItem(AUTH_KEY, JSON.stringify(this.s)); else localStorage.removeItem(AUTH_KEY); },
+  async signIn(email, password){ this.keep(await this.call("token?grant_type=password", {email, password})); },
+  async signOut(){ const t=this.s&&this.s.access_token; this.keep(null); if(t) try{ await this.call("logout", {}, t); }catch(e){} },
+  // A valid access token for database calls (refreshed when it is about to run out), or null for guests.
+  async token(){
+    if(!this.s) return null;
+    if(this.s.expires_at - Date.now()/1000 > 60) return this.s.access_token;
+    try{ this.keep(await this.call("token?grant_type=refresh_token", {refresh_token:this.s.refresh_token})); }
+    catch(e){ if(e.status) this.keep(null); else throw e; } // rejected: back to guest. Offline: keep the session.
+    return this.s && this.s.access_token;
+  }
+};
+
 // Every save writes this browser first, then copies the whole data set to Supabase.
 // If Supabase can't be reached, the browser copy is kept and sent on the next save or visit.
 const RFP_COLS=["RFPID","Title","Sponsor","Department","Problem","Category","Budget","NeededBy","PurchaseType","Justification","DataAccess","CriticalService","ClientOrInvestor","Path","RiskTier","Stage","Status","Created","StageSince","Approvals","Notes"];
@@ -252,20 +295,29 @@ const cloud = {
   on: !!(SUPABASE_URL && SUPABASE_KEY), ready:false, timer:null, replaceAll:false,
   async req(path, opt={}){
     const h={apikey:SUPABASE_KEY, "Content-Type":"application/json", ...opt.headers};
-    if(SUPABASE_KEY.startsWith("eyJ")) h.Authorization="Bearer "+SUPABASE_KEY; // older "anon" keys
+    const t=await auth.token();
+    if(t) h.Authorization="Bearer "+t; else if(SUPABASE_KEY.startsWith("eyJ")) h.Authorization="Bearer "+SUPABASE_KEY; // older "anon" keys
     const res = await fetch(SUPABASE_URL.replace(/\/+$/,"").replace(/\/rest\/v1$/,"")+"/rest/v1/"+path, {...opt, headers:h});
     if(!res.ok) throw new Error(res.status+" "+await res.text());
     const txt = await res.text(); return txt ? JSON.parse(txt) : null;
   },
+  shared(){ return this.on && !!auth.s; }, // true when saves go to the shared database
   status(state){ const el=$("#sync"); if(!el) return;
     const t={off:["Saved in this browser","This copy is only on this device."],
+      guest:["Guest: changes stay in this browser","You are viewing the shared demo data. Try anything: your changes are a private sandbox that resets when you reload. Editors sign in to save."],
       busy:["Saving...","Sending changes to the database."],
       ok:["Saved to database","Shared database (Supabase). Everyone using the demo sees the same RFPs."],
       fail:["Offline: saved in this browser","Could not reach the database. Changes are kept here and sent next time."]}[state];
     el.className="sync "+state; el.textContent=t[0]; el.title=t[1];
-    $("#whereSaved").textContent = this.on ? "Where data lives: a shared Supabase database, with a copy in this browser in case the database is unreachable. Demo data only, visible to every visitor." : "Where data lives: this browser only.";
-    if(this.on) $("#noticeWhere").textContent="Data is saved to a shared demo database that every visitor can see and change."; },
-  queue(){ if(!this.on) return; localStorage.setItem(DIRTY,"1"); if(!this.ready) return;
+    $("#whereSaved").textContent = !this.on ? "Where data lives: this browser only."
+      : auth.s ? "Where data lives: a shared Supabase database, with a copy in this browser in case the database is unreachable. Demo data only, visible to every visitor."
+      : "Where data lives: you are a guest, so the actions below change only your copy in this browser. The shared database is untouched and comes back when you reload.";
+    if(this.on) $("#noticeWhere").textContent = auth.s ? "You are signed in: changes save to the shared demo database that every visitor can see."
+      : "You are a guest: you see the shared demo data, and your changes stay in this browser until you reload.";
+    const b=$("#signBtn"); b.classList.toggle("hidden", !this.on);
+    b.textContent = auth.s ? "Sign out" : "Sign in to edit"; b.title = auth.s ? "Signed in as "+(auth.s.email||"editor") : "Editors sign in to save to the shared database"; },
+  queue(){ if(!this.on) return; if(!auth.s){ this.replaceAll=false; if(this.ready) this.status("guest"); return; } // guests only save in this browser
+    localStorage.setItem(DIRTY,"1"); if(!this.ready) return;
     clearTimeout(this.timer); this.timer=setTimeout(()=>this.push(),400); },
   async push(){
     this.status("busy");
@@ -275,7 +327,7 @@ const cloud = {
       if(db.rfps.length) await this.req("rfps?on_conflict=RFPID",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(db.rfps.map(r=>pick(r,RFP_COLS)))});
       if(db.log.length) await this.req("activity_log?on_conflict=LogID",{method:"POST",headers:{Prefer:"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(db.log.map(l=>pick(l,LOG_COLS)))});
       localStorage.removeItem(DIRTY); this.status("ok");
-    }catch(e){ console.warn("Database save failed:",e); this.status("fail"); }
+    }catch(e){ console.warn("Database save failed:",e); this.status(auth.s?"fail":"guest"); }
   },
   async pull(){
     const [rfps,log]=await Promise.all([this.req("rfps?select=*&order=RFPID"), this.req("activity_log?select=*&order=When")]);
@@ -285,19 +337,19 @@ const cloud = {
     const seq=1+Math.max(0,...rfps.map(r=>+r.RFPID.replace(/\D/g,"")||0));
     return {rfps,log,seq};
   },
-  // On page load: send any unsent changes from this browser, then load the shared data.
+  // On page load and after signing in or out: send an editor's unsent changes, then load the shared data.
   async start(){
     if(!this.on){ this.status("off"); return; }
-    this.status("busy");
+    this.status("busy"); this.ready=false; this.replaceAll=false;
     try{
-      if(localStorage.getItem(DIRTY) && db.rfps.length){ this.ready=true; await this.push(); if(localStorage.getItem(DIRTY)) throw new Error("push failed"); }
+      if(auth.s && localStorage.getItem(DIRTY) && db.rfps.length){ this.ready=true; await this.push(); if(localStorage.getItem(DIRTY)) throw new Error("push failed"); }
       const remote=await this.pull();
-      if(remote.rfps.length){ db=remote; localStorage.setItem(KEY,JSON.stringify(db)); this.ready=true; this.status("ok"); }
+      if(remote.rfps.length){ db=remote; localStorage.setItem(KEY,JSON.stringify(db)); this.ready=true; this.status(auth.s?"ok":"guest"); }
       else { if(!db.rfps.length) addSamples(); this.ready=true; save(); } // empty database: fill it with the demo data
     }catch(e){
       console.warn("Database not reachable, using this browser:",e);
       if(!db.rfps.length){ addSamples(); localStorage.setItem(KEY,JSON.stringify(db)); }
-      this.ready=true; this.status("fail");
+      this.ready=true; this.status(auth.s?"fail":"guest");
     }
     refresh();
   }
@@ -449,8 +501,8 @@ const REG_COLS=["RFPID","Title","Sponsor","Department","Category","Budget","Need
 $("#expReg").onclick=()=>download("rfp-register.csv","﻿"+csv(db.rfps,REG_COLS),"text/csv");
 $("#expLog").onclick=()=>download("rfp-audit-log.csv","﻿"+csv(db.log,["RFPID","When","Who","Action","Detail"]),"text/csv");
 $("#expJson").onclick=()=>download("rfp-backup.json",JSON.stringify(db,null,2),"application/json");
-$("#impJson").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.rfps) throw 0; if(confirm(cloud.on?"Replace all data in the shared database with this backup?":"Replace all data in this browser with this backup?")){ db=d; d.log=d.log||[]; d.log.forEach(l=>l.LogID=l.LogID||uuid()); d.seq=d.seq||1+d.rfps.length; cloud.replaceAll=true; save(); show("dash"); } }catch(_){ alert("That file is not a valid backup."); } }); };
-$("#wipe").onclick=()=>{ if(confirm(`Delete every RFP and log entry ${cloud.on?"in the shared database":"in this browser"}? Download a backup first if you want to keep them.`)){ db={rfps:[],log:[],seq:1}; cloud.replaceAll=true; save(); show("dash"); } };
+$("#impJson").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.rfps) throw 0; if(confirm(cloud.shared()?"Replace all data in the shared database with this backup?":"Replace all data in this browser with this backup?")){ db=d; d.log=d.log||[]; d.log.forEach(l=>l.LogID=l.LogID||uuid()); d.seq=d.seq||1+d.rfps.length; cloud.replaceAll=true; save(); show("dash"); } }catch(_){ alert("That file is not a valid backup."); } }); };
+$("#wipe").onclick=()=>{ if(confirm(`Delete every RFP and log entry ${cloud.shared()?"in the shared database":"in this browser"}? Download a backup first if you want to keep them.`)){ db={rfps:[],log:[],seq:1}; cloud.replaceAll=true; save(); show("dash"); } };
 // ---------- Sample data (made-up, back-dated so the demo looks lived-in) ----------
 const SAMPLES=[
   {f:{title:"Help desk ticketing tool",sponsor:"Head of IT Operations",dept:"IT",problem:"Support requests arrive by email and get lost. No tracking of response times.",category:"Software / SaaS",budget:60000,neededBy:"2027-01-31",purchaseType:"Competitive",data:"internal",critical:"no",client:"no"},moves:3,age:38},
@@ -480,7 +532,7 @@ function addSamples(){
   db.log.sort((a,b)=>a.When<b.When?-1:1);
 }
 $("#loadSample").onclick=()=>{ addSamples(); save(); show("dash"); };
-$("#resetDemo").onclick=()=>{ if(confirm(`Replace everything ${cloud.on?"in the shared database":"in this browser"} with the demo data?`)){ db={rfps:[],log:[],seq:1}; addSamples(); cloud.replaceAll=true; save(); show("dash"); } };
+$("#resetDemo").onclick=()=>{ if(confirm(`Replace everything ${cloud.shared()?"in the shared database":"in this browser"} with the demo data?`)){ db={rfps:[],log:[],seq:1}; addSamples(); cloud.replaceAll=true; save(); show("dash"); } };
 // First visit: start with demo data so the dashboard is never empty.
 // With a database connected, cloud.start() decides instead, so new visitors never overwrite shared data.
 if(!cloud.on && firstVisit && !db.rfps.length){ addSamples(); save(); }
@@ -558,6 +610,20 @@ $("#mCopy").onclick=()=>{ const t=$("#mText"); (navigator.clipboard?navigator.cl
 $("#mDown").onclick=()=>download(modalName,$("#mText").value,"text/plain");
 function showDraft(id){ const r=find(id); openModal(`Draft RFP: ${r.RFPID}`,"Built from the intake answers and the SOP rules: requirements and scoring weights change with category, data access and risk tier.",rfpDraft(r),`${r.RFPID}-draft.txt`); log(r,"RFP draft generated"); save(); }
 function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,"Paste into Microsoft Copilot, ChatGPT or Claude to expand the requirements. Contains no personal or client information.",aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
+
+// Sign in and out
+$("#signBtn").onclick=async()=>{
+  if(!auth.s){ $("#signErr").textContent=""; $("#signModal").classList.remove("hidden"); $("#signEmail").focus(); return; }
+  if(localStorage.getItem(DIRTY) && !confirm("Some changes have not reached the database yet and will be lost. Sign out anyway?")) return;
+  await auth.signOut(); localStorage.removeItem(DIRTY); cloud.start();
+};
+$("#signForm").onsubmit=async e=>{
+  e.preventDefault(); const go=$("#signGo"); go.disabled=true; $("#signErr").textContent="";
+  try{ await auth.signIn($("#signEmail").value.trim(), $("#signPass").value); }
+  catch(err){ $("#signErr").textContent = err.status===400 ? "Wrong email or password." : err.status ? err.message : "Could not reach the sign-in service. Check your connection."; go.disabled=false; return; }
+  go.disabled=false; $("#signPass").value=""; $("#signModal").classList.add("hidden");
+  localStorage.removeItem(DIRTY); cloud.start(); // drop any guest changes and load the shared data
+};
 
 show("dash");
 cloud.start();

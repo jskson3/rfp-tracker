@@ -10,6 +10,7 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 
 - Uses only made-up sample data.
 - Saves to a shared Supabase (Postgres) database, with the browser's own storage as an offline fallback. Without a database configured it runs entirely in the browser. Setup: [supabase/SETUP.md](supabase/SETUP.md).
+- Anyone can try it as a guest (changes stay in their browser); only signed-in editors save to the database. Setup: [supabase/LOGINS.md](supabase/LOGINS.md).
 - Single-file web app (HTML, CSS and JavaScript), with no install needed.
 - Generates a draft RFP document and a ready-to-paste AI prompt from each request, tailored by category, data access and risk tier.
 
@@ -17,6 +18,7 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 
 - [x] Clickable prototype with sample data
 - [x] Shared database (Supabase)
-- [ ] Logins and roles (Supabase Auth)
+- [x] Logins: visitors try it as guests, signed-in editors save (Supabase Auth and row level security)
+- [ ] Roles linked to accounts
 - [ ] AI assistants for drafting RFPs and summarizing vendor responses
 - [ ] Reporting dashboard

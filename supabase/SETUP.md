@@ -41,10 +41,10 @@ Send both values to Claude in the project thread, and Claude will add them to th
    const SUPABASE_KEY = "";
    ```
 3. Paste your values between the quotes, click **Commit changes**, then **Commit changes** again.
-4. Wait about a minute, then open https://jskson3.github.io/rfp-tracker . The badge at the top right should say **Saved to database** with a green dot. Your demo RFPs now appear in Supabase's **Table Editor**.
+4. Wait about a minute, then open https://jskson3.github.io/rfp-tracker . Once logins are on (see [LOGINS.md](LOGINS.md)), sign in and the badge at the top right says **Saved to database** with a green dot. Your demo RFPs now appear in Supabase's **Table Editor**.
 
 ## Good to know
 
-- **Is the publishable key safe to put in a public page?** Yes, it is designed for that. What it can do is decided by the row level security rules in `setup.sql`. For now they let any visitor read and change the demo data, which is fine because it is all made up. Logins come in a later step.
+- **Is the publishable key safe to put in a public page?** Yes, it is designed for that. What it can do is decided by the row level security rules in `setup.sql`. Anyone can read the demo data; only signed-in editors can change it. To set up logins, see [LOGINS.md](LOGINS.md).
 - **Free plan pauses after a week of no use.** If nobody opens the app for 7 days, Supabase pauses the project and emails you. Click **Restore project** in Supabase. Meanwhile the app keeps working from each visitor's browser copy and the badge says **Offline: saved in this browser**.
-- **Reset to demo data** and **Delete all data** (on the Data & export screen) now act on the shared database, not just your browser.
+- **Reset to demo data** and **Delete all data** (on the Data & export screen) act on the shared database when you are signed in, and only on your own browser copy when you are a guest.
