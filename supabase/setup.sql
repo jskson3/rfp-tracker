@@ -1,6 +1,6 @@
 -- RFP Tracker: database setup for Supabase.
 -- Paste this whole file into Supabase > SQL Editor > New query, then click Run.
--- Safe to run more than once.
+-- Safe to run more than once: running it again updates the security rules and keeps your data.
 
 -- One row per RFP. Column names match the app and the CSV exports.
 create table if not exists public.rfps (
@@ -38,17 +38,32 @@ create table if not exists public.activity_log (
 );
 create index if not exists activity_log_rfpid on public.activity_log("RFPID");
 
--- Row level security. This is a public demo with made-up data and no logins yet,
--- so anyone with the public key may read and change rows. Logins come in a later step.
+-- Row level security: who may do what.
+-- Anyone with the public key may read (it's a public demo with made-up data).
+-- Only signed-in editors may add, change or delete RFPs.
+-- The audit log can only be added to, never edited, so the approval history can't be rewritten.
+-- (Deleting an RFP still removes its log entries, because the cascade is part of the table design.)
 alter table public.rfps         enable row level security;
 alter table public.activity_log enable row level security;
 
-drop policy if exists "demo full access" on public.rfps;
-create policy "demo full access" on public.rfps
-  for all to anon, authenticated using (true) with check (true);
+drop policy if exists "demo full access"       on public.rfps;
+drop policy if exists "anyone can read"        on public.rfps;
+drop policy if exists "editors can add"        on public.rfps;
+drop policy if exists "editors can change"     on public.rfps;
+drop policy if exists "editors can delete"     on public.rfps;
+create policy "anyone can read"    on public.rfps for select to anon, authenticated using (true);
+create policy "editors can add"    on public.rfps for insert to authenticated with check (true);
+create policy "editors can change" on public.rfps for update to authenticated using (true) with check (true);
+create policy "editors can delete" on public.rfps for delete to authenticated using (true);
 
-drop policy if exists "demo full access" on public.activity_log;
-create policy "demo full access" on public.activity_log
-  for all to anon, authenticated using (true) with check (true);
+drop policy if exists "demo full access"       on public.activity_log;
+drop policy if exists "anyone can read"        on public.activity_log;
+drop policy if exists "editors can add"        on public.activity_log;
+create policy "anyone can read" on public.activity_log for select to anon, authenticated using (true);
+create policy "editors can add" on public.activity_log for insert to authenticated with check (true);
 
-grant select, insert, update, delete on public.rfps, public.activity_log to anon, authenticated;
+-- Table permissions match the policies above.
+revoke all on public.rfps, public.activity_log from anon, authenticated;
+grant select                         on public.rfps, public.activity_log to anon;
+grant select, insert, update, delete on public.rfps                     to authenticated;
+grant select, insert                 on public.activity_log             to authenticated;
