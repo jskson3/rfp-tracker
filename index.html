@@ -12,7 +12,9 @@ header{background:#1b2a4a;color:#fff;padding:12px 20px;display:flex;gap:16px;ali
 header h1{font-size:18px;margin:0 12px 0 0}
 nav button{background:none;border:0;color:#cfd8ee;font:inherit;padding:8px 12px;border-radius:6px;cursor:pointer}
 nav button.on,nav button:hover{background:#2f4372;color:#fff}
-.who{margin-left:auto;font-size:13px;display:flex;gap:6px;align-items:center}
+.sync{margin-left:auto;font-size:12px;padding:3px 9px;border-radius:999px;background:#2f4372;color:#cfd8ee;white-space:nowrap}
+.sync::before{content:"\25CF  ";color:#9aa6bf}.sync.ok::before{color:#4cd38a}.sync.busy::before{color:#ffd166}.sync.fail::before{color:#ff8a7a}
+.who{font-size:13px;white-space:nowrap;display:flex;gap:6px;align-items:center}
 .who select{font:inherit;padding:3px}
 main{max-width:1150px;margin:0 auto;padding:20px 16px 60px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
@@ -62,6 +64,7 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
     <button data-v="approvals">My approvals</button>
     <button data-v="data">Data &amp; export</button>
   </nav>
+  <span id="sync" class="sync off"></span>
   <div class="who">Acting as
     <select id="who">
       <option>Process Owner</option><option>Sponsor</option><option>Finance</option>
@@ -70,7 +73,7 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
   </div>
 </header>
 <main>
-  <div class="notice">Prototype only. Data is saved in this browser on this computer. Use sample or made-up data, never real company, customer or personal information.</div>
+  <div class="notice">Prototype only. <span id="noticeWhere">Data is saved in this browser on this computer.</span> Use sample or made-up data, never real company, customer or personal information.</div>
 
   <!-- DASHBOARD -->
   <section id="v-dash">
@@ -148,6 +151,7 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
     <div class="card">
       <h2>Data and export</h2>
       <p>These exports use the same column names planned for the SharePoint lists, so the data can be imported there later.</p>
+      <p class="small muted" id="whereSaved"></p>
       <div class="toolbar">
         <button class="btn" id="expReg">Download register (CSV)</button>
         <button class="btn" id="expLog">Download approval and audit log (CSV)</button>
@@ -158,7 +162,7 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
       <div class="toolbar">
         <button class="btn sec" id="loadSample">Add sample RFPs (made-up)</button>
         <button class="btn sec" id="resetDemo">Reset to demo data</button>
-        <button class="btn bad" id="wipe">Delete all data in this browser</button>
+        <button class="btn bad" id="wipe">Delete all data</button>
       </div>
     </div>
   </section>
@@ -226,13 +230,80 @@ function suggest(f){
 }
 
 // ---------- Storage ----------
-const KEY="rfpTracker.v1";
+// Cloud database (Supabase). Leave both blank to keep everything in this browser only.
+// The publishable (anon) key is meant to be public; the tables' row level security decides what it can do.
+const SUPABASE_URL = "";
+const SUPABASE_KEY = "";
+const KEY="rfpTracker.v1", DIRTY=KEY+".unsynced";
+const firstVisit = localStorage.getItem(KEY)===null;
 let db = load();
-function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || {rfps:[],log:[],seq:1}; }catch(e){ return {rfps:[],log:[],seq:1}; } }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ alert("Could not save in this browser."); } }
+function load(){ let d; try{ d=JSON.parse(localStorage.getItem(KEY)); }catch(e){} d = d || {rfps:[],log:[],seq:1}; d.log.forEach(l=>l.LogID=l.LogID||uuid()); return d; }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){ alert("Could not save in this browser."); } cloud.queue(); }
 const now = () => new Date().toISOString();
 const who = () => document.getElementById("who").value;
-function log(rfp, action, detail){ db.log.push({RFPID:rfp.RFPID, When:now(), Who:who(), Action:action, Detail:detail||""}); }
+function uuid(){ return crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16)); }
+function log(rfp, action, detail){ db.log.push({LogID:uuid(), RFPID:rfp.RFPID, When:now(), Who:who(), Action:action, Detail:detail||""}); }
+
+// Every save writes this browser first, then copies the whole data set to Supabase.
+// If Supabase can't be reached, the browser copy is kept and sent on the next save or visit.
+const RFP_COLS=["RFPID","Title","Sponsor","Department","Problem","Category","Budget","NeededBy","PurchaseType","Justification","DataAccess","CriticalService","ClientOrInvestor","Path","RiskTier","Stage","Status","Created","StageSince","Approvals","Notes"];
+const LOG_COLS=["LogID","RFPID","When","Who","Action","Detail"];
+const cloud = {
+  on: !!(SUPABASE_URL && SUPABASE_KEY), ready:false, timer:null, replaceAll:false,
+  async req(path, opt={}){
+    const h={apikey:SUPABASE_KEY, "Content-Type":"application/json", ...opt.headers};
+    if(SUPABASE_KEY.startsWith("eyJ")) h.Authorization="Bearer "+SUPABASE_KEY; // older "anon" keys
+    const res = await fetch(SUPABASE_URL.replace(/\/+$/,"")+"/rest/v1/"+path, {...opt, headers:h});
+    if(!res.ok) throw new Error(res.status+" "+await res.text());
+    const txt = await res.text(); return txt ? JSON.parse(txt) : null;
+  },
+  status(state){ const el=$("#sync"); if(!el) return;
+    const t={off:["Saved in this browser","This copy is only on this device."],
+      busy:["Saving...","Sending changes to the database."],
+      ok:["Saved to database","Shared database (Supabase). Everyone using the demo sees the same RFPs."],
+      fail:["Offline: saved in this browser","Could not reach the database. Changes are kept here and sent next time."]}[state];
+    el.className="sync "+state; el.textContent=t[0]; el.title=t[1];
+    $("#whereSaved").textContent = this.on ? "Where data lives: a shared Supabase database, with a copy in this browser in case the database is unreachable. Demo data only, visible to every visitor." : "Where data lives: this browser only.";
+    if(this.on) $("#noticeWhere").textContent="Data is saved to a shared demo database that every visitor can see and change."; },
+  queue(){ if(!this.on) return; localStorage.setItem(DIRTY,"1"); if(!this.ready) return;
+    clearTimeout(this.timer); this.timer=setTimeout(()=>this.push(),400); },
+  async push(){
+    this.status("busy");
+    try{
+      if(this.replaceAll){ await this.req("rfps?RFPID=not.is.null",{method:"DELETE"}); this.replaceAll=false; } // the log goes with it
+      const pick=(o,cols)=>Object.fromEntries(cols.map(c=>[c,o[c]===""&&c==="NeededBy"?null:o[c]??null]));
+      if(db.rfps.length) await this.req("rfps?on_conflict=RFPID",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(db.rfps.map(r=>pick(r,RFP_COLS)))});
+      if(db.log.length) await this.req("activity_log?on_conflict=LogID",{method:"POST",headers:{Prefer:"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(db.log.map(l=>pick(l,LOG_COLS)))});
+      localStorage.removeItem(DIRTY); this.status("ok");
+    }catch(e){ console.warn("Database save failed:",e); this.status("fail"); }
+  },
+  async pull(){
+    const [rfps,log]=await Promise.all([this.req("rfps?select=*&order=RFPID"), this.req("activity_log?select=*&order=When")]);
+    const iso=v=>v?new Date(v).toISOString():v;
+    rfps.forEach(r=>{ r.Created=iso(r.Created); r.StageSince=iso(r.StageSince); r.Budget=+r.Budget; r.Approvals=r.Approvals||{}; r.Notes=r.Notes||[]; });
+    log.forEach(l=>l.When=iso(l.When));
+    const seq=1+Math.max(0,...rfps.map(r=>+r.RFPID.replace(/\D/g,"")||0));
+    return {rfps,log,seq};
+  },
+  // On page load: send any unsent changes from this browser, then load the shared data.
+  async start(){
+    if(!this.on){ this.status("off"); return; }
+    this.status("busy");
+    try{
+      if(localStorage.getItem(DIRTY) && db.rfps.length){ this.ready=true; await this.push(); if(localStorage.getItem(DIRTY)) throw new Error("push failed"); }
+      const remote=await this.pull();
+      if(remote.rfps.length){ db=remote; localStorage.setItem(KEY,JSON.stringify(db)); this.ready=true; this.status("ok"); }
+      else { if(!db.rfps.length) addSamples(); this.ready=true; save(); } // empty database: fill it with the demo data
+    }catch(e){
+      console.warn("Database not reachable, using this browser:",e);
+      if(!db.rfps.length){ addSamples(); localStorage.setItem(KEY,JSON.stringify(db)); }
+      this.ready=true; this.status("fail");
+    }
+    refresh();
+  }
+};
+// Redraw whatever screen is open (used after the database loads).
+function refresh(){ const cur=[...document.querySelectorAll("main>section")].find(s=>!s.classList.contains("hidden")); if(!cur) return show("dash"); const v=cur.id.slice(2); if(v==="detail"){ if(currentId) openRfp(currentId); } else if(v!=="intake") show(v); }
 
 function gatesFor(r, stage){
   const set = r.Path==="Quick quote" ? GATES["Quick quote"] : GATES["RFP"];
@@ -378,8 +449,8 @@ const REG_COLS=["RFPID","Title","Sponsor","Department","Category","Budget","Need
 $("#expReg").onclick=()=>download("rfp-register.csv","﻿"+csv(db.rfps,REG_COLS),"text/csv");
 $("#expLog").onclick=()=>download("rfp-audit-log.csv","﻿"+csv(db.log,["RFPID","When","Who","Action","Detail"]),"text/csv");
 $("#expJson").onclick=()=>download("rfp-backup.json",JSON.stringify(db,null,2),"application/json");
-$("#impJson").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.rfps) throw 0; if(confirm("Replace all data in this browser with this backup?")){ db=d; save(); show("dash"); } }catch(_){ alert("That file is not a valid backup."); } }); };
-$("#wipe").onclick=()=>{ if(confirm("Delete every RFP and log entry in this browser? Download a backup first if you want to keep them.")){ db={rfps:[],log:[],seq:1}; save(); show("dash"); } };
+$("#impJson").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const d=JSON.parse(t); if(!d.rfps) throw 0; if(confirm(cloud.on?"Replace all data in the shared database with this backup?":"Replace all data in this browser with this backup?")){ db=d; d.log=d.log||[]; d.log.forEach(l=>l.LogID=l.LogID||uuid()); d.seq=d.seq||1+d.rfps.length; cloud.replaceAll=true; save(); show("dash"); } }catch(_){ alert("That file is not a valid backup."); } }); };
+$("#wipe").onclick=()=>{ if(confirm(`Delete every RFP and log entry ${cloud.on?"in the shared database":"in this browser"}? Download a backup first if you want to keep them.`)){ db={rfps:[],log:[],seq:1}; cloud.replaceAll=true; save(); show("dash"); } };
 // ---------- Sample data (made-up, back-dated so the demo looks lived-in) ----------
 const SAMPLES=[
   {f:{title:"Help desk ticketing tool",sponsor:"Head of IT Operations",dept:"IT",problem:"Support requests arrive by email and get lost. No tracking of response times.",category:"Software / SaaS",budget:60000,neededBy:"2027-01-31",purchaseType:"Competitive",data:"internal",critical:"no",client:"no"},moves:3,age:38},
@@ -395,7 +466,7 @@ function addSamples(){
   SAMPLES.forEach(({f,moves,age,cancel})=>{
     let t=t0-age*DAY; const at=()=>new Date(t).toISOString();
     const s=suggest(f), r={RFPID:"RFP-"+String(db.seq++).padStart(3,"0"),Title:f.title,Sponsor:f.sponsor,Department:f.dept,Problem:f.problem,Category:f.category,Budget:f.budget,NeededBy:f.neededBy,PurchaseType:f.purchaseType,Justification:f.justification||"",DataAccess:f.data,CriticalService:f.critical,ClientOrInvestor:f.client,Path:s.path,RiskTier:s.tier,Stage:"Intake",Status:"Open",Created:at(),StageSince:at(),Approvals:{},Notes:[]};
-    const L=(who,a,d)=>db.log.push({RFPID:r.RFPID,When:at(),Who:who,Action:a,Detail:d||""});
+    const L=(who,a,d)=>db.log.push({LogID:uuid(),RFPID:r.RFPID,When:at(),Who:who,Action:a,Detail:d||""});
     db.rfps.push(r); L("Sponsor","Request submitted",`${s.path}, ${s.tier} risk`);
     const st=stagesOf(r), n=Math.min(moves,st.length), step=n?(age*DAY*0.85)/n:0;
     for(let i=0;i<n;i++){
@@ -409,9 +480,10 @@ function addSamples(){
   db.log.sort((a,b)=>a.When<b.When?-1:1);
 }
 $("#loadSample").onclick=()=>{ addSamples(); save(); show("dash"); };
-$("#resetDemo").onclick=()=>{ if(confirm("Replace everything in this browser with the demo data?")){ db={rfps:[],log:[],seq:1}; addSamples(); save(); show("dash"); } };
+$("#resetDemo").onclick=()=>{ if(confirm(`Replace everything ${cloud.on?"in the shared database":"in this browser"} with the demo data?`)){ db={rfps:[],log:[],seq:1}; addSamples(); cloud.replaceAll=true; save(); show("dash"); } };
 // First visit: start with demo data so the dashboard is never empty.
-if(localStorage.getItem(KEY)===null && !db.rfps.length){ addSamples(); save(); }
+// With a database connected, cloud.start() decides instead, so new visitors never overwrite shared data.
+if(!cloud.on && firstVisit && !db.rfps.length){ addSamples(); save(); }
 
 // ---------- RFP draft and AI prompt ----------
 const DATA_TXT={none:"will not access any company or customer data",internal:"will access internal company data",customer:"will access customer or borrower data"};
@@ -488,6 +560,7 @@ function showDraft(id){ const r=find(id); openModal(`Draft RFP: ${r.RFPID}`,"Bui
 function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,"Paste into Microsoft Copilot, ChatGPT or Claude to expand the requirements. Contains no personal or client information.",aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
 
 show("dash");
+cloud.start();
 </script>
 </body>
 </html>
