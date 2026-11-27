@@ -176,14 +176,14 @@ footer p{max-width:none}
 
   <section aria-labelledby="h4s">
     <h2 id="h4s"><span class="n">4.</span>The AI agents</h2>
-    <p>Seven agents are designed in the procedure. Five draft inside the app today, each picked automatically from the RFP's current stage. They share one prompt pattern (role, context, task, rules, output), so the copyable prompt and the live AI draft always match.</p>
+    <p>Seven agents are designed in the procedure. Five work inside the app today, each picked automatically from the RFP's current stage. Four are assistants: one prompt in, one draft out. The Vendor research agent is a real agent: it has a goal, chooses which tools to call, works in a loop and stops when it has a shortlist or hits its step limit. They share one prompt pattern (role, context, task, rules, output), so the copyable prompt and the live AI draft always match.</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th>Agent</th><th>Works as</th><th>Drafts</th></tr></thead>
         <tbody>
           <tr><td>Intake</td><td>Business analyst</td><td>Missing-information questions and a one-page sourcing plan</td></tr>
           <tr><td>Requirements</td><td>Business analyst and RFP writer</td><td>10 to 15 testable requirements, likely vendor questions, gaps</td></tr>
-          <tr><td>Vendor research</td><td>Market researcher</td><td>Kinds of vendor to invite and a screening checklist</td></tr>
+          <tr><td>Vendor research</td><td>Market researcher</td><td>A real agent: searches a vendor directory, screens each vendor and proposes a sourced shortlist for a person to approve</td></tr>
           <tr><td>Vendor liaison</td><td>Communications coordinator</td><td>Invitation email, Q&amp;A replies, award and regret letters</td></tr>
           <tr><td>Evaluation assistant</td><td>Proposal analyst</td><td>Evidence guide and red flags for evaluators. It never scores.</td></tr>
           <tr><td>Coordinator</td><td>Project coordinator</td><td>Planned: reminders and stage hand-offs</td></tr>
@@ -191,7 +191,7 @@ footer p{max-width:none}
         </tbody>
       </table>
     </div>
-    <div class="callout"><p><b>Guardrails built in.</b> Every output is a draft for a person to approve. Prompts forbid personal information, client names and invented numbers, and apply Canadian privacy law. Intake text is cleaned and length-capped on the server so a form field can't smuggle in new instructions. The app holds made-up sample data only.</p></div>
+    <div class="callout"><p><b>Guardrails built in.</b> Every output is a draft for a person to approve. Prompts forbid personal information, client names and invented numbers, and apply Canadian privacy law. Intake text is cleaned and length-capped on the server so a form field can't smuggle in new instructions. The app holds made-up sample data only. The Vendor research agent's screening checks are plain code, not AI, so it can't invent a certification; it has at most 8 steps; and its shortlist is saved only after a signed-in person approves it.</p></div>
   </section>
 
   <section aria-labelledby="h5s">
@@ -249,7 +249,7 @@ footer p{max-width:none}
     <div class="nums">
       <div><b>8</b><span>stages, each with sign-off gates</span></div>
       <div><b>7</b><span>AI agents designed, 5 live in the app</span></div>
-      <div><b>6</b><span>pull requests from prototype to AI</span></div>
+      <div><b>7</b><span>pull requests from prototype to a real AI agent</span></div>
       <div><b>0</b><span>dollars a month to run</span></div>
     </div>
     <p>Alongside the app, I produced the procedure, a process roadmap, a costed architecture for running it on the firm's existing Microsoft tools, a leadership pitch and a prompt library that rebuilds every piece in any AI tool. The portfolio app here is a public, unbranded version with made-up data.</p>
@@ -262,6 +262,7 @@ footer p{max-width:none}
       <li><p><b>An AI's role line is a product decision.</b> The job title in a prompt shapes its tone and assumptions. It should match who really does the work in that organisation.</p></li>
       <li><p><b>Put the rules where they can't be skipped.</b> Access rules live in the database and the AI prompt lives on the server, not in the page, so nothing depends on the browser behaving.</p></li>
       <li><p><b>Ship one small step at a time.</b> Each tool went in as its own small change that worked on its own. The first prototype worked on day one, and the database, logins, hosting and AI drafting all went live in one evening of about two hours.</p></li>
+      <li><p><b>An assistant isn't an agent.</b> One prompt and one answer is an assistant. An agent needs a goal, tools, a loop, a stop condition and a person who approves at the end. I keep the facts in code and let the AI choose the steps, so a rule it breaks is sent back for it to fix.</p></li>
       <li><p><b>Keep a storyboard from day one.</b> Recording each decision and its reason as I went is what made this write-up possible.</p></li>
     </ol>
   </section>
@@ -269,6 +270,7 @@ footer p{max-width:none}
   <section aria-labelledby="h8s">
     <h2 id="h8s"><span class="n">8.</span>What's next</h2>
     <ul class="tight">
+      <li>A Coordinator agent that finds overdue sign-offs and drafts reminders for a person to send.</li>
       <li>Roles linked to accounts, so each person sees only their own approvals.</li>
       <li>AI summaries of vendor proposals against the locked requirements.</li>
       <li>A reporting dashboard for cycle time, spend and bottlenecks.</li>
