@@ -55,6 +55,17 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
 .modal .card{width:100%;max-width:860px;max-height:92vh;display:flex;flex-direction:column;margin:0}
 .modal.hidden{display:none}
 .modal textarea{flex:1;min-height:50vh;font:13px/1.5 Consolas,monospace;white-space:pre-wrap}
+.agent-body{overflow:auto;flex:1}
+.trail{list-style:none;margin:0;padding:0;border-left:2px solid var(--line)}
+.trail li{position:relative;padding:4px 0 8px 16px;font-size:14px}
+.trail li::before{content:"";position:absolute;left:-6px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--brand)}
+.trail li.thought{color:var(--muted);font-style:italic}.trail li.thought::before{background:#c7cdd8}
+.trail li.end::before{background:var(--ok)}.trail li.stop::before{background:var(--bad)}
+.trail code{font-size:12px;background:var(--chip);padding:1px 5px;border-radius:4px;font-style:normal}
+.pick{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;display:flex;gap:10px;align-items:flex-start}
+.pick input{width:auto;margin-top:4px}
+.pick ul{margin:4px 0 0;padding-left:18px}
+.r-pass{color:var(--ok)}.r-flag{color:var(--warn)}.r-fail{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -177,6 +188,11 @@ tr.click{cursor:pointer}tr.click:hover{background:#f2f5fb}
   <textarea id="mText" readonly></textarea>
   <div class="toolbar" style="margin:12px 0 0"><button class="btn" id="mCopy">Copy to clipboard</button><button class="btn sec" id="mDown">Download (.txt)</button><span class="small muted" id="mMsg"></span></div>
 </div></div>
+<div class="modal hidden" id="agentModal"><div class="card">
+  <div class="toolbar" style="justify-content:space-between"><h3 id="agTitle" style="margin:0">Vendor research agent</h3><button class="btn sec" onclick="closeAgent()">Close</button></div>
+  <p class="small muted" style="margin:0 0 10px">A real AI agent (Google Gemini) with a goal, tools and a step limit of <span id="agMax"></span>. It searches a <b>made-up sample vendor directory</b>, checks each vendor against the screening checklist, and proposes a shortlist. It never scores, chooses or contacts vendors: a signed-in person approves the shortlist before it is saved.</p>
+  <div class="agent-body"><h3>What the agent did</h3><ol class="trail" id="agSteps"></ol><div id="agResult"></div></div>
+</div></div>
 <div class="modal hidden" id="signModal"><div class="card" style="max-width:420px">
   <h3>Sign in to edit</h3>
   <p class="small muted" style="margin:0">Editors save to the shared database. Guests can try everything, but their changes stay in their own browser and reset when the page reloads. Signing in reloads the shared data.</p>
@@ -251,6 +267,7 @@ const SUPABASE_URL = "https://yjgzrnlknsdctunjmqed.supabase.co";
 const SUPABASE_KEY = "sb_publishable_fP2jNcSH3rIBFUkOKiFVGQ_AeoMrT1e";
 // AI drafting runs on Vercel (api/draft.js holds the Gemini key). Copies hosted elsewhere call the Vercel one.
 const AI_URL = location.hostname.endsWith(".vercel.app") ? "/api/draft" : "https://rfp-tracker-swart.vercel.app/api/draft";
+const AGENT_URL = AI_URL.replace(/draft$/,"research"); // the Vendor research agent (api/research.js)
 const KEY="rfpTracker.v1", DIRTY=KEY+".unsynced";
 const firstVisit = localStorage.getItem(KEY)===null;
 let db = load();
@@ -460,9 +477,10 @@ function openRfp(id){
     <p class="small"><b>Business problem:</b> ${esc(r.Problem)}</p>
     ${r.Justification?`<p class="small"><b>Justification:</b> ${esc(r.Justification)}</p>`:""}
     <p class="small muted"><b>AI agent for this stage:</b> ${esc(RFP_AGENTS.agentFor(r.Stage).name)}, ${esc(RFP_AGENTS.agentFor(r.Stage).does)}. People approve everything it drafts.</p>
-    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button><button class="btn" onclick="showAI('${r.RFPID}')">Ask the ${esc(RFP_AGENTS.agentFor(r.Stage).name)} (Gemini)</button><button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
+    <p class="toolbar"><button class="btn sec" onclick="showDraft('${r.RFPID}')">Draft the RFP document</button>${RFP_AGENTS.agentFor(r.Stage).agentic&&r.Status==="Open"?`<button class="btn" onclick="runAgent('${r.RFPID}')">Run the ${esc(RFP_AGENTS.agentFor(r.Stage).name)}</button>`:`<button class="btn" onclick="showAI('${r.RFPID}')">Ask the ${esc(RFP_AGENTS.agentFor(r.Stage).name)} (Gemini)</button>`}<button class="btn sec" onclick="showPrompt('${r.RFPID}')">Copy AI prompt (Copilot, ChatGPT, Claude)</button></p>
     ${r.Status==="Open"&&r.Stage==="Intake"&&who()==="Process Owner"?`<p class="small">Change path: <select style="width:auto" onchange="changePath('${r.RFPID}',this.value)">${Object.keys(STAGES).map(p=>`<option ${p===r.Path?"selected":""}>${p}</option>`).join("")}</select> &nbsp; Risk tier: <select style="width:auto" onchange="changeTier('${r.RFPID}',this.value)">${["Low","Medium","High"].map(t=>`<option ${t===r.RiskTier?"selected":""}>${t}</option>`).join("")}</select></p>`:""}
   </div>
+  ${shortlistHtml(r)}
   <div class="card">
     <h3>Sign-offs for this stage: ${esc(r.Stage)}</h3>
     ${r.Status==="Open"?gateHtml:`<p class="muted">This RFP is ${r.Status.toLowerCase()}.</p>`}
@@ -603,6 +621,68 @@ async function showAI(id){
     text=(e instanceof TypeError ? "Could not reach the AI service. Check your connection." : e.message)+"\n\nYou can still click \"Copy AI prompt\" and paste it into any AI tool.";
   }
   if(turn===aiTurn && !$("#modal").classList.contains("hidden")) $("#mText").value=text;
+}
+// ---------- Vendor research agent (a real agent: api/research.js) ----------
+// The server runs the loop and streams each step; the page shows them as they arrive.
+// The shortlist is only saved after a signed-in person ticks the vendors to keep and approves it.
+const AGENT_MAX_STEPS=8; // matches MAX_TURNS in api/_research-agent.js
+let agTurn=0, agRun=null;
+function closeAgent(){ agTurn++; $("#agentModal").classList.add("hidden"); }
+$("#agentModal").onclick=e=>{ if(e.target.id==="agentModal") closeAgent(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeAgent(); });
+const latestShortlist = r => (r.Notes||[]).filter(n=>n&&n.Kind==="Vendor shortlist").slice(-1)[0];
+function addStep(cls,html){ const li=document.createElement("li"); li.className=cls; li.innerHTML=html; $("#agSteps").appendChild(li); li.scrollIntoView({block:"nearest"}); }
+async function runAgent(id){
+  const r=find(id), turn=++agTurn; agRun={id,steps:0};
+  $("#agTitle").textContent=`Vendor research agent: ${r.RFPID}`; $("#agMax").textContent=AGENT_MAX_STEPS+" Gemini calls";
+  $("#agSteps").innerHTML=""; $("#agResult").innerHTML=`<p class="small muted" id="agWait">Working... each step appears here as the agent takes it.</p>`;
+  $("#agentModal").classList.remove("hidden");
+  const handle=m=>{
+    if(turn!==agTurn) return;
+    if(m.type==="step"){ agRun.steps++;
+      if(m.kind==="thought") addStep("thought",esc(m.text));
+      else addStep("",`${esc(m.label)} <code>${esc(m.tool)}</code>`); }
+    if(m.type==="done"){ addStep("end","Stopped: shortlist ready for a person to approve."); showShortlist(r,m); log(r,"Vendor research agent ran",`${agRun.steps} steps, ${m.shortlist.length} vendors proposed`); save(); }
+    if(m.type==="error"){ addStep("stop","Stopped: "+esc(m.error)); $("#agResult").innerHTML=`<p class="small">${esc(m.error)}</p><p class="small muted">You can still click "Copy AI prompt" and paste it into any AI tool.</p>`; }
+  };
+  try{
+    const res=await fetch(AGENT_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({RFPID:r.RFPID,...Object.fromEntries(AI_FIELDS.map(c=>[c,r[c]]))})});
+    if(!res.ok){ const d=await res.json().catch(()=>({})); throw new Error(d.error||"The AI service is not available right now."); }
+    const rd=res.body.getReader(), dec=new TextDecoder(); let buf="";
+    for(;;){ const {value,done}=await rd.read(); if(value) buf+=dec.decode(value,{stream:true});
+      let i; while((i=buf.indexOf("\n"))>=0){ const line=buf.slice(0,i).trim(); buf=buf.slice(i+1); if(line) handle(JSON.parse(line)); }
+      if(done) break; }
+    if(buf.trim()) handle(JSON.parse(buf));
+  }catch(e){ handle({type:"error",error:e instanceof TypeError?"Could not reach the AI service. Check your connection.":e.message}); }
+}
+const resultCls = v => v==="pass"?"r-pass":v==="flag"?"r-flag":v==="fail"?"r-fail":"muted";
+function showShortlist(r,m){
+  agRun.result=m; const signed=cloud.on&&!!auth.s;
+  $("#agResult").innerHTML=`<h3 style="margin-top:14px">Proposed shortlist</h3><p class="small">${esc(m.summary)}</p>
+    <p class="small muted">Untick any vendor you don't want. The agent doesn't rank them: order means nothing.</p>
+    ${m.shortlist.map((v,i)=>`<label class="pick" style="font-weight:400"><input type="checkbox" checked data-i="${i}"><span><b>${esc(v.name)}</b> <span class="chip">${esc(v.screening)}</span><br>${esc(v.reason)}
+      ${v.open_questions&&v.open_questions.length?`<ul class="small">${v.open_questions.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}
+      <details class="small"><summary>Screening checklist</summary>${v.checks.map(c=>`<div><span class="${resultCls(c.result)}">${esc(c.result)}</span>: ${esc(c.check)}. <span class="muted">${esc(c.note)}</span></div>`).join("")}</details>
+      <span class="small muted">Source: ${esc(v.source)}</span></span></label>`).join("")}
+    <p class="toolbar" style="margin-top:12px"><button class="btn ok" id="agApprove" ${signed?"":"disabled"}>Approve and save shortlist</button><button class="btn sec" onclick="closeAgent()">Discard</button>
+    <span class="small muted">${signed?`Saved to the RFP as approved by ${esc(who())}. Invitations are still sent by a person.`:"Sign in to approve and save. Guests can watch the agent work, but only a signed-in editor can approve what it proposes."}</span></p>`;
+  if(signed) $("#agApprove").onclick=()=>approveShortlist(r.RFPID);
+}
+function approveShortlist(id){
+  const r=find(id), m=agRun&&agRun.result; if(!m||!auth.s) return;
+  const keep=[...document.querySelectorAll("#agResult input[type=checkbox]")].filter(c=>c.checked).map(c=>m.shortlist[+c.dataset.i]);
+  if(!keep.length) return alert("Tick at least one vendor, or click Discard.");
+  r.Notes=r.Notes||[];
+  r.Notes.push({Kind:"Vendor shortlist", When:now(), By:who(), Summary:m.summary, Steps:agRun.steps, Model:m.model,
+    Vendors:keep.map(v=>({VendorID:v.vendor_id, Name:v.name, Reason:v.reason, Questions:v.open_questions||[], Screening:v.screening, Source:v.source}))});
+  log(r,"Vendor shortlist approved",keep.map(v=>v.name).join(", ")+" (proposed by the Vendor research agent)"); save();
+  closeAgent(); openRfp(id);
+}
+function shortlistHtml(r){
+  const s=latestShortlist(r); if(!s) return "";
+  return `<div class="card"><h3>Approved vendor shortlist</h3>
+    <p class="small muted">Proposed by the Vendor research agent, approved by ${esc(s.By)} on ${day(s.When)}. Sample data only. The stage sign-offs below still apply, and a person sends every invitation.</p>
+    <table><tr><th>Vendor</th><th>Why</th><th>Screening</th><th>Source</th></tr>${s.Vendors.map(v=>`<tr><td>${esc(v.Name)}</td><td>${esc(v.Reason)}</td><td>${esc(v.Screening)}</td><td class="small muted">${esc(v.Source)}</td></tr>`).join("")}</table></div>`;
 }
 function showPrompt(id){ const r=find(id); openModal(`AI prompt: ${r.RFPID}`,`The ${RFP_AGENTS.agentFor(r.Stage).name}'s prompt for the ${r.Stage} stage. Paste into Microsoft Copilot, ChatGPT or Claude. Contains no personal or client information.`,aiPrompt(r),`${r.RFPID}-ai-prompt.txt`); }
 

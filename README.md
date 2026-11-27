@@ -14,8 +14,11 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 - Saves to a shared Supabase (Postgres) database, with the browser's own storage as an offline fallback. Without a database configured it runs entirely in the browser. Setup: [supabase/SETUP.md](supabase/SETUP.md).
 - Anyone can try it as a guest (changes stay in their browser); only signed-in editors save to the database. Setup: [supabase/LOGINS.md](supabase/LOGINS.md).
 - Single-file web app (HTML, CSS and JavaScript), with no install needed.
-- Drafts with Google Gemini in one click, as the AI agent for each stage (Intake, Requirements, Vendor research, Vendor liaison, Evaluation assistant) (setup: [api/GEMINI.md](api/GEMINI.md)).
+- Drafts with Google Gemini in one click, as the AI assistant for each stage (Intake, Requirements, Vendor liaison, Evaluation assistant) (setup: [api/GEMINI.md](api/GEMINI.md)).
+- **A real AI agent for the Vendor list stage.** The Vendor research agent has a goal, tools and a step limit: it reads the RFP, searches a made-up vendor directory, screens each vendor against the vendor risk checklist, and proposes a sourced shortlist. The app shows every step as it happens, and nothing is saved until a signed-in person approves it. How it works: [api/AGENTS.md](api/AGENTS.md).
 - Generates a draft RFP document and a ready-to-paste AI prompt from each request, tailored by category, data access and risk tier.
+
+![The Vendor research agent working through its steps](agent.png)
 
 ## Roadmap
 
@@ -25,6 +28,8 @@ This is a personal portfolio project. I'm designing an RFP process framework fro
 - [x] Hosting on Vercel (ready for server code that keeps API keys out of the browser)
 - [ ] Roles linked to accounts
 - [x] AI drafting by a different agent at each stage (Google Gemini, called from a Vercel serverless function so the key stays secret)
+- [x] First real AI agent: Vendor research (tool calling loop, step limit, person approves the shortlist)
+- [ ] Coordinator agent (chases overdue sign-offs, drafts reminders for a person to send)
 - [ ] AI summaries of vendor responses
 - [ ] Reporting dashboard
 - [x] Case study write-up

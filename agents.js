@@ -36,7 +36,8 @@
     research: {
       name: "Vendor research agent",
       role: "a market researcher for IT vendors that serve Canadian financial services, working for " + COMPANY,
-      does: "suggests the kinds of vendor to invite and how to screen them",
+      does: "searches the vendor directory, screens each vendor and proposes a sourced shortlist",
+      agentic: true, // a real agent with tools and a loop: api/research.js. The task below is the one-shot prompt.
       task: [
         "Describe 3 to 5 kinds of vendor that could meet this need (for example a software product, a managed service, a reseller), with the trade-offs of each.",
         "Write a screening checklist for the vendor risk team: sanctions, recent breaches, financial health, Canadian data hosting, certifications.",
