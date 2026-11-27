@@ -13,14 +13,20 @@ const clean = (v, max) => String(v ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s
 const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
 const yesNo = v => (v === "yes" ? "yes" : "no");
 
-function buildPrompt(r) {
-  const budget = Math.max(0, Math.min(1e9, Number(r.Budget) || 0));
-  return agentPrompt({
+// The intake answers, cleaned and limited to known values. Shared with the Vendor research agent (research.js).
+function cleanRfp(r) {
+  return {
     Title: clean(r.Title, 200), Problem: clean(r.Problem, 1500), Category: clean(r.Category, 60),
+    Budget: Math.max(0, Math.min(1e9, Number(r.Budget) || 0)),
     NeededBy: clean(r.NeededBy, 10), Path: pick(r.Path, PATHS, "Light RFP"), RiskTier: pick(r.RiskTier, TIERS, "Medium"),
     Stage: pick(r.Stage, Object.keys(STAGE_AGENT), "Requirements"), DataAccess: pick(r.DataAccess, ["none", "internal", "customer"], "none"),
     CriticalService: yesNo(r.CriticalService), ClientOrInvestor: yesNo(r.ClientOrInvestor)
-  }, "$" + budget.toLocaleString("en-CA"), true);
+  };
+}
+
+function buildPrompt(r) {
+  const c = cleanRfp(r);
+  return agentPrompt(c, "$" + c.Budget.toLocaleString("en-CA"), true);
 }
 
 module.exports = async (req, res) => {
@@ -62,3 +68,6 @@ module.exports = async (req, res) => {
 };
 
 module.exports.buildPrompt = buildPrompt;
+module.exports.cleanRfp = cleanRfp;
+module.exports.clean = clean;
+module.exports.MODEL = MODEL;
